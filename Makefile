@@ -53,7 +53,7 @@ $(PYTHON):
 data: $(FXDIR)/fxdata.h
 
 $(FXDIR)/game.bin $(SKETCH)/gamedata.h &: $(ASSETS) $(ORIGINAL_FILES) $(ORIGINALS_STAMP) $(wildcard tools/*.py) | $(PYTHON)
-	@test -n "$(ORIGINALS)" || (echo "ORIGINALS fehlt: make ORIGINALS=/pfad/zu/MONKEY (oder in config.mk)"; exit 1)
+	@test -n "$(ORIGINALS)" || (echo "ORIGINALS missing: make ORIGINALS=/path/to/MONKEY (or set it in config.mk)"; exit 1)
 	$(PYTHON) tools/advc.py game/game.adv $(foreach d,$(ORIGINALS),--original "$(d)") --preview $(BUILD)/preview \
 	  --bin $(FXDIR)/game.bin --header $(SKETCH)/gamedata.h
 
@@ -83,7 +83,7 @@ HOSTFLAGS   := -std=c++17 -O1 -g -Wall -Wno-unused-function -Wno-pragma-pack -in
 fxhost: $(FXHOST)
 
 $(FXHOST_FONT):
-	@test -n "$(ARDUBOY2_DATA)" || (echo "Arduboy2-Bibliothek nicht gefunden: erst ./build.sh ausführen"; exit 1)
+	@test -n "$(ARDUBOY2_DATA)" || (echo "Arduboy2 library not found: run ./build.sh first"; exit 1)
 	{ echo '#include <cstdint>'; echo 'namespace host { extern const uint8_t font5x7[] = {'; \
 	  sed -n '/font5x7\[\] = {/,/^};/p' "$(ARDUBOY2_DATA)" | sed '1d;$$d'; echo '}; }'; } > $@
 
@@ -99,7 +99,7 @@ test: $(FXHOST) | $(PYTHON)
 upload: upload-sketch upload-data
 
 upload-sketch: $(BUILD)/$(SKETCH).ino.hex
-	@test -n "$(PORT)" || (echo "Kein Arduboy gefunden (/dev/cu.usbmodem*). Eingeschaltet?"; exit 1)
+	@test -n "$(PORT)" || (echo "No Arduboy found (/dev/cu.usbmodem*). Is it switched on?"; exit 1)
 	$(ARDUINO_CLI) upload --fqbn $(FQBN) --port $(PORT) --input-dir $(BUILD) $(SKETCH)
 
 upload-data: $(FXDIR)/fxdata.h

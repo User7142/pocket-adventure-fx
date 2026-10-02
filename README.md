@@ -44,10 +44,17 @@ Dialogs, conditions and timings follow the original scripts.
 At start you choose the language; the game remembers it in EEPROM. On the title
 screen B switches the sound on and off.
 
-## Building
+## Your game files
 
-Requirements: macOS or Linux, Python 3.10+, curl, and your own copy of the VGA floppy
-version – a directory with `000.LFL` and `DISK01.LEC` … `DISK04.LEC`.
+You need the **VGA floppy version** (not the CD or Special Edition): a directory that
+directly contains `000.LFL` and `DISK01.LEC` … `DISK04.LEC`.
+
+From the original floppies the files are packed in `.ZLH` archives. Without a DOS PC,
+[7-Zip](https://www.7-zip.org/) extracts them (tip from spinal).
+
+## Building on macOS and Linux
+
+Requirements: Python 3.10+, curl, make.
 
 ```bash
 ./build.sh <copy> [<another copy> …]
@@ -58,6 +65,55 @@ and `arduboy-homemade:avr@1.4.1` into `build/arduino/`; Python packages go into
 `.venv/`. Nothing is installed system-wide.
 
 Graphics, walk boxes and music come from the first copy, the texts from each copy.
+Warnings about `noreturn`, “Low memory” and clock skew are expected. At the end the
+script prints `Done: dist/PocketAdventureFX.arduboy`.
+
+## Building on Windows (WSL)
+
+`build.sh` is a shell script, so on Windows it runs in WSL (the Windows Subsystem for
+Linux); flashing then works with a Windows tool. Based on the guide by spinal.
+
+1. **Install WSL once.** In PowerShell as administrator:
+   ```powershell
+   wsl --install -d Ubuntu
+   ```
+   Restart if asked, open “Ubuntu” from the Start menu and create a user.
+2. **Install the tools** in the Ubuntu window (`apt update` first, otherwise the
+   install can fail with 404 errors):
+   ```bash
+   sudo apt update
+   sudo apt install -y python3 python3-venv curl make git
+   ```
+3. **Get the project.** Clone it, or download the ZIP from GitHub and extract it, for
+   example to `F:\arduboy\pocket-adventure-fx`, with your game files next to it in
+   `F:\arduboy\monkey`. Drive `F:` is `/mnt/f` in WSL:
+   ```bash
+   cd /mnt/f/arduboy/pocket-adventure-fx
+   ```
+4. **Build:**
+   ```bash
+   ./build.sh ../monkey
+   ```
+   The package ends up in `dist\PocketAdventureFX.arduboy` in the project folder.
+
+| Problem | Fix |
+|---|---|
+| `'.' is not recognized` | You ran it in `cmd.exe`. Run it in the Ubuntu (WSL) window. |
+| `\r: command not found` or other odd script errors | The files got Windows line endings: `sudo apt install dos2unix`, then `find . -name '*.sh' -o -name '*.py' -o -name Makefile \| xargs dos2unix` |
+| The build can’t find the game files | The folder must directly contain `000.LFL` and `DISK0x.LEC` (see above). |
+
+## Installing on the Arduboy
+
+Flashing can replace the other games on your flashcart, so **back it up first**: in the
+[Arduboy Toolset](https://github.com/randomouscrap98/arduboy_toolset/releases), read the
+flashcart from the Arduboy and save it to a file.
+
+1. Connect the Arduboy directly to the computer (not through a USB hub) and turn it on.
+2. In the Arduboy Toolset: *File → Open cart editor*, drag
+   `PocketAdventureFX.arduboy` into the window, then *File → Flash to Arduboy*.
+
+Use the cart editor: on Windows, “Upload Sketch” stopped with a charmap decode error
+for this package.
 
 ## Development
 
@@ -196,6 +252,12 @@ Texts are references to the original: `s22#5` (global script 22), `r38.s203#1`
 (local script 203 of room 38), `r28.en#1` (entry script), `o498#1` (object script),
 `o498.name` (object name), `…:2` (only the second speech bubble). List all texts of a
 copy with `tools/scumm_text.py <copy>`. Own texts of the engine use `ui.<key>`.
+
+## Thanks
+
+- **spinal** ([community.arduboy.com](https://community.arduboy.com/t/the-first-scenes-of-the-secret-of-monkey-island-on-the-arduboy-fx/13756)):
+  the Windows build guide above, the tip for extracting the original floppies, and the
+  suggestion to use the Arduboy’s greyscale mode.
 
 ## Legal
 
