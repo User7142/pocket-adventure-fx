@@ -21,13 +21,16 @@ namespace Ui {
 
   // Vollbild (Kapitelkarte, vom Skript): steht, bis die Musik endet (ohne
   // Musik 3 s) oder A gedrückt wird – wie das Überspringen im Original.
-  void card(uint24_t image, uint8_t music);
+  void card(uint24_t image, uint24_t grey, uint8_t music);  // grey: Graustufen-Fassung|NONE24
   bool showingCard();
   void drawCard();
 
   // Blitz (vom Skript, z. B. die Vision der Voodoo-Lady): das Display
-  // blinkt frames lang invertiert, im Takt von 4 Frames.
+  // blinkt frames lang invertiert, im Takt von 4 Frames. inverted() sagt,
+  // ob es gerade invertiert sein soll; der Sketch schickt das ans Display,
+  // während es für die Bildübertragung ausgewählt ist.
   void flash(uint8_t frames);
+  bool inverted();
 
   // Dialogauswahl (vom Skript): beginChoice, addChoice je sichtbare Option,
   // dann ask – erst ab da gilt die Auswahl (false: keine Option sichtbar).

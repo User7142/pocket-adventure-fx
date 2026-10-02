@@ -19,6 +19,10 @@ or the Ardens emulator. Every copy you pass becomes a language in the game (test
 English and German). The package contains material from your copy and is for your own
 use only.
 
+The game shows four shades of grey – backgrounds, characters and objects – using
+the Arduboy’s greyscale mode ([ArduboyG](#architecture)); black and white can be
+switched on in the menu.
+
 ## What is included
 
 - the intro with the title melody and the conversation with the lookout
@@ -42,7 +46,8 @@ Dialogs, conditions and timings follow the original scripts.
 | B | open the menu (verbs, inventory) | close the menu | – |
 
 At start you choose the language; the game remembers it in EEPROM. On the title
-screen B switches the sound on and off.
+screen B switches the sound on and off. In the menu, the line below the verbs
+switches between greyscale and black and white (also remembered).
 
 ## Your game files
 
@@ -128,9 +133,11 @@ make            # FX data + sketch
 make package    # dist/PocketAdventureFX.arduboy
 make test       # unit tests and scene runs on the host test bench
 make upload     # sketch and FX development data to the Arduboy FX
+make TIMING=1 upload   # the same, showing the time per plane in µs (bottom right)
 ```
 
-Converted images for checking end up in `build/preview/`.
+Converted images for checking end up in `build/preview/` (greyscale images as
+`…_grey.png`).
 
 **Upload tip:** connect the Arduboy directly to the computer. Behind some hubs it
 does not re-enumerate after the reset into the bootloader and the upload waits forever.
@@ -140,10 +147,12 @@ does not re-enumerate after the reset into the bootloader and the upload waits f
 - `tests/test_advc.py`, `tests/test_scumm_text.py`: compiler, image encoding, path
   finding, text decoder. Tests that need the original data run only with `config.mk`.
 - `tests/fxhost/`: the engine sources compiled for the host against a small
-  replacement of Arduboy2/ArduboyFX (with frame buffer and font). It plays by pressing
-  buttons and records rooms, texts, options, object states and characters.
-  `tests/test_fxhost.py` plays every scene in every language of the build and compares
-  each text with your copy – the repository only contains references.
+  replacement of Arduboy2/ArduboyFX/ArduboyG (frame buffer with three planes, font).
+  It plays by pressing buttons and records rooms, texts, options, object states and
+  characters. `tests/test_fxhost.py` plays every scene in every language of the build
+  and compares each text with your copy – the repository only contains references. It
+  also checks the greyscale output and compares the engine’s fast text, rectangle and
+  background drawing pixel by pixel with the plain Arduboy2 versions.
 - `tests/ardens_run.py`: the same scenes in the Ardens web player with the real
   `.arduboy` package (headless Chromium via Playwright). It reads the game state from
   the emulated RAM using the addresses in the ELF file and only releases a button once
@@ -164,10 +173,12 @@ tools/advc.py               compiler: game.adv + copies → game.bin + gamedata.
 tools/scumm_v4.py           reads rooms, walk boxes, objects, costumes and AdLib music
 tools/scumm_text.py         reads all texts from the scripts (bytecode decoder)
 tools/textsource.py         texts of a copy: language, character set, wrapping, bubbles
-tools/original.py           1-bit conversion (backgrounds: Atkinson, characters: silhouettes)
+tools/original.py           image conversion: 1 bit (Atkinson, silhouettes) and greyscale
 tools/package.py            builds the .arduboy package
 tools/vendor/               fxdata-build.py, fxdata-upload.py (MrBlinky, CC0)
+libraries/ArduboyG/         greyscale library by tiberiusbrown (MIT), see libraries/README.md
 PocketAdventureFX/          the sketch
+  Display.cpp               fast drawing for three planes: text, rectangles, backgrounds
   World.*                   languages, rooms, actors, walking, objects, flags, inventory
   Script.*                  bytecode interpreter (foreground script, two background routines)
   Ui.*                      cursor, sentence line, menu, speech, dialog options
@@ -180,8 +191,8 @@ tests/                      see above
 **Everything that is content lives in the FX flash** and is streamed when needed:
 backgrounds, sprites, texts, scripts, music, walk boxes. RAM holds only the changing
 game state (actor positions, one byte per object, flags, small number variables,
-inventory). The sketch needs about 21 KB of 29 KB program flash and 2 KB of 2.5 KB RAM
-(1 KB of it is the screen buffer).
+inventory). The sketch needs about 24 KB of 29 KB program flash and 2.1 KB of 2.5 KB
+RAM (1 KB of it is the screen buffer).
 
 **Languages.** `game.bin` starts with a language directory. Everything that contains
 text exists once per language (verbs, object names, scripts, rooms); images, walk boxes
@@ -207,6 +218,29 @@ each room has its own 1-bit conversion settings (tone range, local contrast, col
 channel). Characters become light silhouettes slightly larger than the backgrounds.
 Music: the melody voice of the AdLib tracks, played on the piezo by a 1 kHz timer
 interrupt.
+
+**Greyscale.** The display can only show black and white. [ArduboyG](libraries/README.md)
+shows three image planes so quickly one after another (156 planes per second) that a
+pixel looks black, dark grey, light grey or white depending on how many planes it is lit
+in. Every image that has a greyscale version stores three frames per frame, one per
+plane; texts, the cursor and the menu are black and white and look the same in every
+plane. The game logic still runs 60 times per second, but everything is drawn three
+times as often, and a plane that is late shows up as flicker. That budget (about 5 ms
+per plane) rules out two Arduboy2 functions that set every pixel on its own:
+`drawChar` (48 pixels per character) and `fillRect` (the box behind a speech bubble
+took 8 ms). `Display.cpp` replaces them and draws page by page – a page is 8 rows, one
+byte per column, just like a column of the font – and reads aligned backgrounds
+straight from the FX flash into the buffer; a speech bubble now takes about 1.7 ms.
+Closed doors, which show exactly the background, are not drawn at all, and the actors’
+sprites are chosen once per logic step. ArduboyG runs on timer 4 (the music uses timers
+1 and 3) and parks on the bottom row, so the display does not show row 63.
+
+The greyscale conversion is tuned per image in `game.adv` (`greyscale` blocks): tone
+range, local contrast and a gamma that darkens the middle – the OLED shows grey much
+brighter than any preview – and, where something would get lost in the grey, a subject
+with its own tone curve and a black outline (the ghost ship in the lava, the logo, the
+dock outside the kitchen). Characters keep their black outline and use three shades
+inside.
 
 ## Scene description
 
@@ -248,6 +282,20 @@ Commands: `say`, `walk`, `put`, `face`, `remove`, `halt`, `costume`, `set`/`clea
 `<object> open`, `hover <object>`, `<actor> x|y <|> n`. Object handlers `on <verb>`,
 `on <verb> <object>` and `on other`.
 
+Greyscale versions of the title, a chapter card or a room:
+
+```
+greyscale room kitchen
+  layer contrast 0.5 gamma 1.3                  # the room's tone range and channel
+  layer from 212.5 tone auto gamma 1.3          # from x 212.5 of the original on
+  subject polygon 216 125 … channel max tone auto min 1 outline
+end
+greyscale room ghostship
+  layer weights 0.4 0.3 0.9 tone 20 170
+  subject hue blue outline                      # ship: blue pixels of the original
+end
+```
+
 Texts are references to the original: `s22#5` (global script 22), `r38.s203#1`
 (local script 203 of room 38), `r28.en#1` (entry script), `o498#1` (object script),
 `o498.name` (object name), `…:2` (only the second speech bubble). List all texts of a
@@ -257,7 +305,11 @@ copy with `tools/scumm_text.py <copy>`. Own texts of the engine use `ui.<key>`.
 
 - **spinal** ([community.arduboy.com](https://community.arduboy.com/t/the-first-scenes-of-the-secret-of-monkey-island-on-the-arduboy-fx/13756)):
   the Windows build guide above, the tip for extracting the original floppies, and the
-  suggestion to use the Arduboy’s greyscale mode (work in progress).
+  suggestion to use the Arduboy’s greyscale mode.
+- **tiberiusbrown** (Peter Brown): the greyscale library
+  [ArduboyG](https://github.com/tiberiusbrown/ArduGray_Demo) and the emulator
+  [Ardens](https://github.com/tiberiusbrown/Ardens), whose cycle-exact emulation made it
+  possible to measure the drawing times.
 
 ## Legal
 
@@ -273,3 +325,5 @@ The engine, the compiler and the tools are free software under the
 - `tools/vendor/fxdata-build.py`, `fxdata-upload.py`:
   [MrBlinky/Arduboy-Python-Utilities](https://github.com/MrBlinky/Arduboy-Python-Utilities), CC0.
 - Arduboy2 and ArduboyFX (downloaded by `build.sh`): Arduboy-homemade-package by MrBlinky.
+- `libraries/ArduboyG`: [ArduboyG](https://github.com/tiberiusbrown/ArduGray_Demo) by
+  Peter Brown (tiberiusbrown), MIT license (`libraries/ArduboyG/LICENSE`), unchanged.

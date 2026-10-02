@@ -2173,3 +2173,66 @@ room kitchen original 41 tone 85 165 contrast 0 overlay 898 902
   place pot original 333 picture face front
   place fish original 378 picture face front
 end
+
+# --- Graustufen (2 Bit) --------------------------------------------------------
+# Je Bild eine Graustufen-Fassung (tools/original.py: to_grey); im Spiel über
+# das Menü zwischen Graustufen und Schwarz-Weiß umschaltbar. Die Werte sind
+# auf dem Gerät ausgesucht: Das OLED zeigt Grau viel heller als jede Vorschau.
+# Ohne Angabe gelten Tonbereich und Kanal des Raums; gamma > 1 dunkelt die
+# Mitten ab, contrast betont Kanten wie bei der 1-Bit-Fassung.
+
+# Titel: Himmel und Berg höchstens hellgrau, das Logo freigestellt, hell und
+# schwarz umrandet – sonst geht es im aufgehellten Himmel unter.
+greyscale title
+  layer weights 0.3 0.3 0.4 tone 15 110 max 2
+  subject hue magenta weights 0.5 0 0.5 tone 60 160 min 1 outline
+end
+
+# Kapitelkarte: Schrift, gerastert bleiben die Kanten weich.
+greyscale card part1
+  layer gamma 1.3 dither
+end
+
+greyscale room lookout
+  layer contrast 0.8 gamma 1.3
+end
+
+greyscale room dock
+  layer contrast 0.8 gamma 1.3
+end
+
+greyscale room scummbar
+  layer contrast 0.5 gamma 1.3
+end
+
+# Geisterschiff: Blau stark gewichtet, damit das Schiff hell vor der Lava
+# steht, und schwarz umrandet.
+greyscale room ghostship
+  layer weights 0.4 0.3 0.9 tone 20 170
+  subject hue blue outline
+end
+
+greyscale room ghostcabin
+  layer contrast 0.6 gamma 1.3
+end
+
+greyscale room street
+  layer contrast 0.5 gamma 1.3
+end
+
+greyscale room voodoo
+  layer contrast 0.8 gamma 1.3
+end
+
+greyscale room map
+  layer contrast 2.0 gamma 1.3
+end
+
+# Küche: innen wie die übrigen Räume, draußen (ab der Wand bei x 212.5) mit
+# eigenem Tonbereich. Der Steg hat dieselbe Farbe wie das Wasser; sein Umriss
+# ist von Hand nachgezeichnet (Originalkoordinaten), er wird hell und umrandet.
+greyscale room kitchen
+  layer contrast 0.5 gamma 1.3
+  layer from 212.5 tone auto gamma 1.3
+  subject polygon 216 125  254 125  254 117  265 117  265 125  278 125  278 124  287 124  287 127  310 127  310 133  287 133  287 137  278 137  278 135  266 135  266 144  258 144  258 135  216 135 channel max tone auto min 1 outline
+end

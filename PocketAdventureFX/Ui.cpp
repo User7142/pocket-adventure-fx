@@ -10,15 +10,21 @@ namespace {
   constexpr uint8_t MENU_COLS = 2;
   constexpr uint8_t MENU_NAME_CHARS = 10;
   constexpr uint8_t MENU_VERB_ROWS = (VERB_COUNT + MENU_COLS - 1) / MENU_COLS;
-  constexpr uint8_t MENU_INV_TOP = MENU_VERB_ROWS * LINE_H + 1;
+  // Unter den Verben eine Zeile über die volle Breite: Graustufen an/aus
+  constexpr uint8_t MENU_GREY_ROW = MENU_VERB_ROWS;
+  constexpr uint8_t MENU_INV_ROW = MENU_GREY_ROW + 1;  // erste Inventarzeile
+  constexpr uint8_t MENU_INV_TOP = MENU_INV_ROW * LINE_H + 1;
   constexpr uint8_t MENU_INV_LINE_H = 7;
-  constexpr uint8_t MENU_INV_ROWS = (HEIGHT - MENU_INV_TOP) / MENU_INV_LINE_H;
+  // Die unterste Pixelzeile zeigt das Display nicht (ArduboyG, Park-Zeile).
+  constexpr uint8_t MENU_INV_ROWS = (HEIGHT - 1 - MENU_INV_TOP) / MENU_INV_LINE_H;
+  static_assert(MENU_INV_ROWS >= 1, "kein Platz für das Inventar im Menü");
 
   // --- Sprechtext ---
   char text[TEXT_BUFFER];  // Sprechblase oder voller Text der gewählten Option
   uint8_t textActor = NONE8;
   uint16_t textFrames;  // 0 = kein Text
   uint24_t cardImage = NONE24;
+  uint24_t cardGrey;
   bool cardMusic;
   uint8_t cardFrames;
 
@@ -146,7 +152,8 @@ namespace {
       uint8_t first = row * MENU_COLS;
       return VERB_COUNT - first < MENU_COLS ? VERB_COUNT - first : MENU_COLS;
     }
-    uint8_t first = (row - MENU_VERB_ROWS) * MENU_COLS;
+    if (row == MENU_GREY_ROW) return 1;
+    uint8_t first = (row - MENU_INV_ROW) * MENU_COLS;
     if (first >= World::inventoryCount) return 0;
     uint8_t left = World::inventoryCount - first;
     return left < MENU_COLS ? left : MENU_COLS;
@@ -165,8 +172,8 @@ namespace {
       }
     }
     // Inventar scrollt, damit die Auswahl sichtbar bleibt.
-    if (menuRow >= MENU_VERB_ROWS) {
-      uint8_t invRow = menuRow - MENU_VERB_ROWS;
+    if (menuRow >= MENU_INV_ROW) {
+      uint8_t invRow = menuRow - MENU_INV_ROW;
       if (invRow < menuTop) menuTop = invRow;
       if (invRow >= menuTop + MENU_INV_ROWS) menuTop = invRow - MENU_INV_ROWS + 1;
     }
@@ -179,7 +186,11 @@ namespace {
       firstObject = NONE8;
       return;
     }
-    uint8_t item = World::inventory[(menuRow - MENU_VERB_ROWS) * MENU_COLS + menuCol];
+    if (menuRow == MENU_GREY_ROW) {
+      Settings::setGreyscale(!greyscale);
+      return;
+    }
+    uint8_t item = World::inventory[(menuRow - MENU_INV_ROW) * MENU_COLS + menuCol];
     if (verb == 0) {
       // Mit „Gehe zu“ auf ein Inventarobjekt: Verb aus der Spielbeschreibung.
       if (World::header.inventoryVerb == NONE8) return;
@@ -224,12 +235,12 @@ namespace {
     arduboy.print(len > COLS ? buf + len - COLS : buf);
   }
 
-  void drawMenuItem(uint8_t x, uint8_t y, uint24_t name, bool selected) {
-    if (selected) arduboy.fillRect(x, y, WIDTH / MENU_COLS - 1, LINE_H - 1, WHITE);
+  void drawMenuItem(uint8_t x, uint8_t y, uint24_t name, bool selected, uint8_t cols = 1) {
+    if (selected) arduboy.fillRect(x, y, cols * (WIDTH / MENU_COLS) - 1, LINE_H - 1, WHITE);
     arduboy.setTextColor(selected ? BLACK : WHITE);
     arduboy.setTextBackground(selected ? WHITE : BLACK);
     arduboy.setCursor(x + 1, y);
-    printFx(name, MENU_NAME_CHARS);
+    printFx(name, cols * MENU_NAME_CHARS + (cols - 1));
     arduboy.setTextColor(WHITE);
     arduboy.setTextBackground(BLACK);
   }
@@ -241,6 +252,8 @@ namespace {
       drawMenuItem(c * (WIDTH / MENU_COLS), r * LINE_H, readVerb(v).name,
                    menuRow == r && menuCol == c);
     }
+    drawMenuItem(0, MENU_GREY_ROW * LINE_H, greyscale ? World::header.uiGreyOn : World::header.uiGreyOff,
+                 menuRow == MENU_GREY_ROW, MENU_COLS);
     arduboy.drawFastHLine(0, MENU_INV_TOP - 1, WIDTH, WHITE);
     if (!World::inventoryCount) {
       arduboy.setCursor(1, MENU_INV_TOP + 1);
@@ -252,7 +265,7 @@ namespace {
       if (r >= menuTop + MENU_INV_ROWS) break;
       drawMenuItem(c * (WIDTH / MENU_COLS), MENU_INV_TOP + (r - menuTop) * MENU_INV_LINE_H,
                    objectName(World::inventory[i]),
-                   menuRow == MENU_VERB_ROWS + r && menuCol == c);
+                   menuRow == MENU_INV_ROW + r && menuCol == c);
     }
   }
 
@@ -284,7 +297,7 @@ namespace {
       uint8_t n = 0;
       while (p[n] && p[n] != '\n') ++n;
       arduboy.setCursor(x + 1 + (maxLen - n) * CHAR_W / 2, top + row * LINE_H);
-      for (uint8_t i = 0; i < n; ++i) arduboy.write(p[i]);
+      arduboy.write(reinterpret_cast<const uint8_t*>(p), n);
       p += n + (p[n] ? 1 : 0);
     }
   }
@@ -342,7 +355,6 @@ namespace {
 void Ui::reset() {
   cardImage = NONE24;
   flashFrames = 0;
-  arduboy.invert(false);
   resetSentence();
   pending = false;
   menuOpen = false;
@@ -363,6 +375,10 @@ void Ui::flash(uint8_t frames) {
   flashFrames = frames;
 }
 
+bool Ui::inverted() {
+  return flashFrames & 4;
+}
+
 uint8_t Ui::hovered() {
   return hover;
 }
@@ -371,8 +387,9 @@ bool Ui::talking() {
   return textFrames != 0;
 }
 
-void Ui::card(uint24_t image, uint8_t music) {
+void Ui::card(uint24_t image, uint24_t grey, uint8_t music) {
   cardImage = image;
+  cardGrey = grey;
   cardMusic = music != NONE8;
   cardFrames = 180;
   if (cardMusic) Sound::play(music);
@@ -383,7 +400,7 @@ bool Ui::showingCard() {
 }
 
 void Ui::drawCard() {
-  FX::drawBitmap(0, 0, cardImage, 0, dbmNormal);
+  drawScreen(0, 0, cardImage, cardGrey);
 }
 
 void Ui::beginChoice() {
@@ -411,10 +428,7 @@ bool Ui::choosing() {
 }
 
 void Ui::update() {
-  if (flashFrames) {
-    --flashFrames;
-    arduboy.invert(flashFrames && (flashFrames & 4));
-  }
+  if (flashFrames) --flashFrames;
   if (cardImage != NONE24) {
     bool over = cardMusic ? !Sound::playing() : --cardFrames == 0;
     if (over || arduboy.justPressed(A_BUTTON)) {

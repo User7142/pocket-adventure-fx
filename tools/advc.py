@@ -48,20 +48,26 @@ MAX_INVENTORY = 16
 DIRS = {"right": 0, "left": 1, "front": 2}
 
 # Texte der Engine selbst je Sprache (keine Spieltexte, die kommen aus der
-# Originalkopie), Zeichensatz CP437. sound_on/sound_off/empty: höchstens 21
-# Zeichen (eine Zeile). Mit „ui.<schlüssel>“ in say verwendbar, z. B. für
+# Originalkopie), Zeichensatz CP437. sound_on/sound_off/empty/grey_on/
+# grey_off: höchstens 21 Zeichen (eine Zeile; grey_* ist die Menüzeile zum
+# Umschalten zwischen Graustufen und Schwarz-Weiß). Mit „ui.<schlüssel>“ in say verwendbar, z. B. für
 # Ausgänge zu Räumen, die diese Fassung nicht enthält.
 UI_TEXT = {
     "en": {"sound_on": "A:Start  B:Sound on", "sound_off": "A:Start  B:Sound off", "empty": "(empty)",
-           "not_included": "Not included in this version."},
+           "not_included": "Not included in this version.",
+           "grey_on": "Greyscale: on", "grey_off": "Greyscale: off"},
     "de": {"sound_on": "A:Start  B:Ton an", "sound_off": "A:Start  B:Ton aus", "empty": "(leer)",
-           "not_included": "In dieser Fassung nicht enthalten."},
+           "not_included": "In dieser Fassung nicht enthalten.",
+           "grey_on": "Graustufen: an", "grey_off": "Graustufen: aus"},
     "fr": {"sound_on": "A:Jouer  B:Son oui", "sound_off": "A:Jouer  B:Son non", "empty": "(vide)",
-           "not_included": "Pas inclus dans cette version."},
+           "not_included": "Pas inclus dans cette version.",
+           "grey_on": "Niveaux de gris : oui", "grey_off": "Niveaux de gris : non"},
     "it": {"sound_on": "A:Gioca  B:Audio sì", "sound_off": "A:Gioca  B:Audio no", "empty": "(vuoto)",
-           "not_included": "Non incluso in questa versione."},
+           "not_included": "Non incluso in questa versione.",
+           "grey_on": "Scala di grigi: sì", "grey_off": "Scala di grigi: no"},
     "es": {"sound_on": "A:Jugar  B:Sonido sí", "sound_off": "A:Jugar  B:Sonido no", "empty": "(vacío)",
-           "not_included": "No incluido en esta versión."},
+           "not_included": "No incluido en esta versión.",
+           "grey_on": "Escala de grises: sí", "grey_off": "Escala de grises: no"},
 }
 UI_REF = re.compile(r"ui\.(\w+)")
 
@@ -87,11 +93,14 @@ RECORDS = {
         ("roomCount", "u8"), ("rooms", "u24"),
         ("musicCount", "u8"), ("music", "u24"),
         ("startScript", "u24"), ("cursor", "u24"),
-        ("title", "u24"), ("titleMusic", "u8"),
+        # titleGrey: dasselbe Bild in Graustufen (3 Ebenen als Frames), NONE24 = keins
+        ("title", "u24"), ("titleGrey", "u24"), ("titleMusic", "u8"),
         # Verb für Inventar-Klicks mit „walk“ (z. B. look), sonst NONE8
         ("inventoryVerb", "u8"),
-        # Texte der Engine selbst (nicht aus dem Spiel): Titelzeile, leeres Inventar
+        # Texte der Engine selbst (nicht aus dem Spiel): Titelzeile, leeres
+        # Inventar, Menüzeile Graustufen an/aus
         ("uiSoundOn", "u24"), ("uiSoundOff", "u24"), ("uiEmpty", "u24"),
+        ("uiGreyOn", "u24"), ("uiGreyOff", "u24"),
     ],
     # prep: Verbindungswort für Zwei-Objekt-Sätze („mit“, „an“), sonst NONE24
     "VerbRec": [("name", "u24"), ("prep", "u24"), ("fallback", "u24")],
@@ -100,19 +109,22 @@ RECORDS = {
     "VerbEntry": [("verb", "u8"), ("other", "u8"), ("script", "u24")],
     # object: Objekt, für das die Figur selbst der Hotspot ist (NONE8 = keins);
     # der Hotspot wandert dann mit der Figur.
+    # grey: dieselben Frames in Graustufen (3 Ebenen je Frame), NONE24 = keins
     "ActorRec": [
-        ("sprite", "u24"),
+        ("sprite", "u24"), ("grey", "u24"),
         ("stand", "u8"), ("walkFirst", "u8"), ("walkCount", "u8"),
         ("talk", "u8"), ("front", "u8"), ("frontTalk", "u8"),
         ("object", "u8"),
         # depth: Größenstufen für Räume mit Tiefe (NONE24 = immer gleich groß);
         # Tabelle: u8 Anzahl, je Stufe u8 Mindestgröße (0–255) + u24 Sprite
+        # + u24 Sprite in Graustufen (NONE24 = keins)
         ("depth", "u24"),
     ],
     # matrix: boxCount × boxCount Bytes, Eintrag [von][nach] = nächste Box auf
     # dem kürzesten Weg (NONE8 = unerreichbar), vom Compiler vorberechnet.
+    # grey: Hintergrund in Graustufen, je Ebene ein Frame (NONE24 = nur 1 Bit)
     "RoomRec": [
-        ("background", "u24"), ("width", "u16"), ("height", "u8"),
+        ("background", "u24"), ("grey", "u24"), ("width", "u16"), ("height", "u8"),
         ("boxCount", "u8"), ("boxes", "u24"), ("matrix", "u24"),
         ("placeCount", "u8"), ("places", "u24"),
         ("entry", "u24"),
@@ -127,10 +139,15 @@ RECORDS = {
         ("scaleTop", "u8"), ("scaleBottom", "u8"),
     ],
     # Ein Objekt an einer Stelle im Raum. image == NONE24: nur Hotspot.
+    # grey: Bild in Graustufen (Ausschnitt der Kulisse: Türen, Gegenstände),
+    # Frame f des 1-Bit-Bilds liegt dort als Frames 3f..3f+2 (je Ebene einer);
+    # NONE24: das 1-Bit-Bild gilt für alle Ebenen (Figuren als Dekoration).
+    # backdrop: 1, wenn Zustand 0 genau die Kulisse zeigt (eine geschlossene
+    # Tür) – dann zeichnet die Engine nichts.
     "PlaceRec": [
         ("object", "u8"), ("x", "u16"), ("y", "u8"), ("w", "u8"), ("h", "u8"),
         ("walkX", "u16"), ("walkY", "u8"), ("face", "u8"),
-        ("image", "u24"), ("frames", "u8"), ("speed", "u8"),
+        ("image", "u24"), ("grey", "u24"), ("frames", "u8"), ("speed", "u8"), ("backdrop", "u8"),
     ],
     "TrackRec": [("count", "u16"), ("loop", "u8")],
     "NoteRec": [("ocr", "u16"), ("ms", "u8")],
@@ -166,7 +183,7 @@ OPCODES = [
     ("OPTION", ["u24", "u24"]),      # text, ziel: Option anbieten (davor ggf. Bedingungscode)
     ("ASK", []),                     # Auswahl zeigen und warten; ohne Optionen weiter
     ("ROOM", ["u8", "u16", "u8", "u8"]),  # raum, x|0xFFFF, y, dir: laden, Spielfigur setzen, entry aufrufen
-    ("CARD", ["u24", "u8"]),         # Vollbild, Musik|NONE8: bis die Musik endet (ohne: 3 s) oder A
+    ("CARD", ["u24", "u24", "u8"]),  # Vollbild, dasselbe in Graustufen|NONE24, Musik|NONE8: bis die Musik endet (ohne: 3 s) oder A
     ("WAITR", ["u16", "u16"]),       # zufällig min … max Frames warten
     ("JUNLESSPOS", ["u8", "u8", "u16", "u24"]),  # POS_Y|POS_GT|COND_NOT, actor, wert, ziel: springt, wenn der Vergleich nicht gilt
     ("START", ["u24"]),              # Hintergrundablauf starten (ersetzt einen laufenden)
@@ -491,8 +508,12 @@ class Game:
         self.start_room = None
         self.cursor = None
         self.title = None
+        self.title_source = None  # Ausschnitt des Originals für die Graustufen
         self.title_music = None
         self.cards = {}      # id → {"room", "threshold", "music", "line"}
+        # Graustufen je Bild: ("room", id) | ("card", id) | ("title", None)
+        # → {"layers", "subjects", "line"} (original.to_grey)
+        self.greyscale = {}
         self.routines = {}   # id → (Zeile, AST): Hintergrundabläufe
         self.cutscenes = {}  # id → (Zeile, AST): Szenen, die ein Ablauf mit play startet
         self.subs = {}       # id → (Zeile, AST): Unterprogramme (call)
@@ -695,7 +716,7 @@ class Parser:
         seqs += [(walk, sv.RIGHT, k) for k in range(steps)]
         seqs += [(talk, sv.RIGHT, 1), (stand, sv.FRONT, 0), (talk, sv.FRONT, 1)]
         try:
-            strip, fw, fh = orig.costume_frames(costume, palette, seqs, scale, dark, outline)
+            strip, fw, fh, grey = orig.costume_frames(costume, palette, seqs, scale, dark, outline, grey=True)
         except ValueError as e:
             raise ln.err(str(e))
         n = len(seqs)
@@ -705,12 +726,14 @@ class Parser:
             # nach Größe der Lauffläche (Skalierung zur Laufzeit wäre zu teuer)
             for f in DEPTH_LEVELS[1:]:
                 try:
-                    st, w, h = orig.costume_frames(costume, palette, seqs, scale * f, dark, outline)
+                    st, w, h, gr = orig.costume_frames(costume, palette, seqs, scale * f, dark, outline, grey=True)
                 except ValueError as e:
                     raise ln.err(str(e))
-                levels.append((f, ("pil", f"costume{number}_{round(scale * f, 3)}_{dark}_{outline}", st, (w, h))))
+                key = f"costume{number}_{round(scale * f, 3)}_{dark}_{outline}"
+                levels.append((f, ("pil", key, st, (w, h)), ("grey", key + "_grey", gr, w)))
+        key = f"costume{number}_{scale}_{dark}_{outline}"
         self.g.actors[aid] = {
-            "sprite": ("pil", f"costume{number}_{scale}_{dark}_{outline}", strip, (fw, fh)),
+            "sprite": ("pil", key, strip, (fw, fh)), "grey": ("grey", key + "_grey", grey, fw),
             "stand": 0, "walk": [1, steps], "talk": n - 3, "front": n - 2, "fronttalk": n - 1,
             "object": obj, "index": len(self.g.actors), "line": ln, "levels": levels,
         }
@@ -725,16 +748,18 @@ class Parser:
         stand = [sv.INIT, sv.STAND]
         steps = orig.cycle_length(costume, stand, sv.RIGHT)
         seqs = [(stand, sv.RIGHT, k) for k in range(steps)]
-        strips = [orig.costume_frames(costume, palette, seqs, sc, dark, outline) for sc in scales]
-        fw = max(w for _, w, _ in strips)
-        fh = max(h for _, _, h in strips)
+        strips = [orig.costume_frames(costume, palette, seqs, sc, dark, outline, grey=True) for sc in scales]
+        fw = max(w for _, w, _, _ in strips)
+        fh = max(h for _, _, h, _ in strips)
         out = Image.new("RGBA", (fw * steps * len(strips), fh), (0, 0, 0, 0))
-        for si, (strip, w, h) in enumerate(strips):
+        grey = Image.new("RGBA", out.size, (0, 0, 0, 0))
+        for si, (strip, w, h, grey_strip) in enumerate(strips):
             for k in range(steps):
-                frame = strip.crop((k * w, 0, (k + 1) * w, h))
-                out.paste(frame, ((si * steps + k) * fw + (fw - w) // 2, fh - h))
+                at = ((si * steps + k) * fw + (fw - w) // 2, fh - h)
+                out.paste(strip.crop((k * w, 0, (k + 1) * w, h)), at)
+                grey.paste(grey_strip.crop((k * w, 0, (k + 1) * w, h)), at)
         key = f"costume{number}_" + "_".join(map(str, scales)) + f"_{dark}_{outline}"
-        return ("pil", key, out, (fw, fh)), steps, fw, fh
+        return ("pil", key, out, (fw, fh)), ("grey", key + "_grey", grey, fw), steps, fw, fh
 
     def top_object(self, ln, args):
         if len(args) != 2:
@@ -915,6 +940,121 @@ class Parser:
         self.g.cards[cid] = {"room": self.num(ln, args[2]), "threshold": opts.get("threshold", [50])[0],
                              "music": opts.get("music", [None])[0], "line": ln}
 
+    # ---- Graustufen -------------------------------------------------------
+
+    GREY_SYNTAX = ("Syntax: greyscale title | card <id> | room <id>, darin Zeilen\n"
+                   "  layer [from X] [Tonoptionen]\n"
+                   "  subject hue <name> | polygon X Y X Y … [Tonoptionen] [min N] [outline]\n"
+                   "Tonoptionen: channel C | weights R G B, tone S W | tone auto, contrast K, "
+                   "gamma G, max N, dither")
+
+    def top_greyscale(self, ln, args):
+        """Graustufen-Fassung eines Bildes (original.to_grey). Steht für sich,
+        damit Titel, Karten und Räume dieselbe Beschreibung nutzen."""
+        if args[:1] == ["title"] and len(args) == 1:
+            key = ("title", None)
+        elif len(args) == 2 and args[0] in ("card", "room"):
+            key = (args[0], args[1])
+        else:
+            raise ln.err(self.GREY_SYNTAX)
+        if key in self.g.greyscale:
+            raise ln.err(f"greyscale {' '.join(args)} doppelt")
+        spec = {"layers": [], "subjects": [], "line": ln}
+        while True:
+            sub = self.next()
+            if sub is None:
+                raise ln.err("greyscale: 'end' fehlt")
+            kw, *a = sub.tokens
+            if kw == "end" and not a:
+                break
+            if kw == "layer":
+                spec["layers"].append(self.grey_options(sub, a, layer=True))
+            elif kw == "subject":
+                spec["subjects"].append(self.grey_options(sub, a, layer=False))
+            else:
+                raise sub.err(self.GREY_SYNTAX)
+        if not spec["layers"]:
+            raise ln.err("greyscale braucht mindestens eine layer-Zeile")
+        edges = [layer.get("from", 0) for layer in spec["layers"]]
+        if len(set(edges)) != len(edges):
+            raise ln.err("zwei Schichten mit derselben Kante (from)")
+        if 0 not in edges:
+            raise ln.err("eine Schicht muss ab dem linken Rand gelten (ohne from)")
+        self.g.greyscale[key] = spec
+
+    def grey_options(self, ln, toks, layer):
+        out = {}
+        i = 0
+        if not layer:
+            if toks[:1] == ["hue"] and len(toks) >= 2:
+                if toks[1] not in orig.HUES:
+                    raise ln.err(f"hue: {'/'.join(orig.HUES)}")
+                out["mask"] = ("hue", toks[1])
+                i = 2
+            elif toks[:1] == ["polygon"]:
+                j = 1
+                while j < len(toks) and re.fullmatch(r"-?\d+(\.\d+)?", toks[j]):
+                    j += 1
+                nums = [self.real(ln, v) for v in toks[1:j]]
+                if len(nums) < 6 or len(nums) % 2:
+                    raise ln.err("polygon braucht mindestens drei Punkte (X Y …)")
+                out["mask"] = ("polygon", list(zip(nums[::2], nums[1::2])))
+                i = j
+            else:
+                raise ln.err("subject braucht hue <name> oder polygon X Y …")
+        while i < len(toks):
+            k = toks[i]
+            def take(n):
+                vals = toks[i + 1:i + 1 + n]
+                if len(vals) != n:
+                    raise ln.err(f"'{k}' braucht {n} Wert(e)")
+                return vals
+            if k in out:
+                raise ln.err(f"'{k}' doppelt")
+            if k == "from" and layer:
+                out[k] = self.real(ln, take(1)[0])
+            elif k == "channel":
+                if take(1)[0] not in orig.CHANNELS:
+                    raise ln.err(f"channel: {'/'.join(orig.CHANNELS)}")
+                out[k] = toks[i + 1]
+            elif k == "weights":
+                out[k] = tuple(self.real(ln, v) for v in take(3))
+            elif k == "tone":
+                if toks[i + 1:i + 2] == ["auto"]:
+                    out[k] = "auto"
+                    i += 2
+                    continue
+                black, white = (self.real(ln, v) for v in take(2))
+                if not 0 <= black < white:
+                    raise ln.err("tone: 0 ≤ schwarz < weiß")
+                out[k] = (black, white)
+            elif k in ("contrast", "gamma"):
+                out[k] = self.real(ln, take(1)[0])
+                if out[k] < 0 or (k == "gamma" and out[k] == 0):
+                    raise ln.err(f"{k} muss positiv sein")
+            elif k in ("max", "min"):
+                if k == "min" and layer:
+                    raise ln.err("min nur bei subject")
+                out[k] = self.num(ln, take(1)[0])
+                if not 0 <= out[k] <= orig.GREY_PLANES:
+                    raise ln.err(f"{k}: 0…{orig.GREY_PLANES}")
+            elif k == "dither" and layer:
+                out[k] = True
+                i += 1
+                continue
+            elif k == "outline" and not layer:
+                out[k] = True
+                i += 1
+                continue
+            else:
+                raise ln.err(f"unbekannte Option '{k}'\n{self.GREY_SYNTAX}")
+            i += 1 + {"weights": 3, "tone": 2}.get(k, 1)
+        if "channel" in out and "weights" in out:
+            raise ln.err("channel und weights schließen sich aus")
+        if out.get("min", 0) > out.get("max", orig.GREY_PLANES):
+            raise ln.err("min größer als max")
+        return out
+
     def top_title(self, ln, args):
         syntax = ('Syntax: title "<png>" [music <id>] | title original <raum> [overlay <objekt> X Y] '
                   'crop X0 Y0 X1 Y1 [tone S W] [contrast K] [music <id>]')
@@ -951,6 +1091,7 @@ class Parser:
         canvas = Image.new("RGBA", (128, 64), (0, 0, 0, 255))
         canvas.paste(mono, ((128 - width) // 2, 0))
         self.g.title = ("pil", "title", canvas)
+        self.g.title_source = {"image": img.crop((x0, y0, x1, y1)), "width": width, "tone": (black, white)}
         self.g.title_music = (opts["music"][0], ln) if "music" in opts else None
 
     # ---- Hilfen ---------------------------------------------------------
@@ -1028,6 +1169,11 @@ class Parser:
                                        "picture": 0, "door": 0, "direct": 0})
         image = opts.get("image", [None])[0]
         frames = opts.get("frames", [1])[0]
+        # Bild aus der Kulisse: Kulisse je Zustand und Ausschnitt, damit
+        # compile() mit dem greyscale-Block des Raums die Graustufen rechnet
+        grey_from = None
+        grey_sprite = None  # Figur als Dekoration: Graustufen aus dem Kostüm
+        backdrop = 0
         if "picture" in opts:
             # Aufnehmbarer Gegenstand: sein Originalbild, ausgeschnitten aus der
             # Kulisse mit aufgelegtem Objekt. Die Kulisse selbst ist ohne ihn
@@ -1039,6 +1185,7 @@ class Parser:
             comp.paste(self.object_image(ln, src, number), self.object_pos(ln, src, number))
             mono = orig.to_mono(comp, *room["tone"])
             image = ("pil", f"room{src.number}_obj{number}", mono.crop((x, y, x + w, y + h)))
+            grey_from = {"key": f"room{src.number}_obj{number}", "box": (x, y, w, h), "states": [comp]}
         if "door" in opts:
             # Tür: Zustand 0 = zu (wie die Kulisse), 1 = offen (Objektbild des
             # Originals aufgelegt) – zwei Bilder, je Zustand eins.
@@ -1047,15 +1194,19 @@ class Parser:
             src = room["original"]
             comp = room["composite"].copy()
             closed = orig.to_mono(comp, *room["tone"]).crop((x, y, x + w, y + h))
+            grey_from = {"key": f"room{src.number}_door{number}", "box": (x, y, w, h),
+                         "states": [comp.copy()]}
             comp.paste(self.object_image(ln, src, number), self.object_pos(ln, src, number))
             opened = orig.to_mono(comp, *room["tone"]).crop((x, y, x + w, y + h))
+            grey_from["states"].append(comp)
             strip = Image.new("RGBA", (w * 2, h))
             strip.paste(closed, (0, 0))
             strip.paste(opened, (w, 0))
             image = ("pil", f"room{src.number}_door{number}", strip, (w, h))
+            backdrop = 1  # Zustand 0 ist der Ausschnitt der Kulisse selbst
         if "costume" in opts:
             # at x y ist hier der Fußpunkt; das Bild steht mittig darüber.
-            image, frames, fw, fh = self.costume_place_image(
+            image, grey_sprite, frames, fw, fh = self.costume_place_image(
                 ln, opts["costume"][0], opts.get("states", [room["scale"]]),
                 opts.get("palette", [38])[0], opts.get("dark", [45])[0], opts.get("outline", [1])[0])
             x, y = x - fw // 2, y - fh + 1
@@ -1078,7 +1229,8 @@ class Parser:
             walk, face = walk or [0, 0], 0 if face is None else face
         elif walk is None or face is None:
             raise ln.err("place braucht walkto und face")
-        return {"object": obj, "x": x + dx, "y": y, "w": w, "h": h, "image": image,
+        return {"object": obj, "x": x + dx, "y": y, "w": w, "h": h, "image": image, "grey_from": grey_from,
+                "backdrop": backdrop, "grey_sprite": grey_sprite,
                 "frames": frames, "speed": opts.get("speed", [8])[0],
                 "walk": walk, "face": face, "line": ln}
 
@@ -1254,6 +1406,7 @@ class Compiler:
         self.strings = {}         # Text → Label, je Sprache neu
         self.label_no = 0
         self.images = {}
+        self.grey_previews = {}  # Schlüssel → Graubild zum Ansehen (--preview)
         self.src = None           # TextSource der Sprache, die gerade übersetzt wird
         self.text_max = 0         # längste Sprechblase/Option (Textpuffer der Engine)
         self.max_visible = 1      # gleichzeitig sichtbare Optionen (Auswahlpuffer der Engine)
@@ -1311,7 +1464,8 @@ class Compiler:
             raise ln.err(str(e))
 
     def card_image(self, cid):
-        """Bild der Karte in der Sprache self.src (Label)."""
+        """Bild der Karte in der Sprache self.src: (Label, Label der
+        Graustufen oder NONE24)."""
         c = self.g.cards[cid]
         room = self.g.original_room_of(self.src.dir, c["room"], c["line"])
         rgb = np.asarray(room.image().convert("RGB")).max(axis=2)
@@ -1326,9 +1480,101 @@ class Compiler:
         bright = Image.fromarray(rgb.astype(np.uint8)).crop((x0, y0, x1, y1)).resize(size, Image.BOX)
         mono = bright.point(lambda v: 255 if v > c["threshold"] else 0).convert("L")
         canvas = Image.new("RGBA", (128, 64), (0, 0, 0, 255))
-        canvas.paste(Image.merge("RGBA", (mono, mono, mono, Image.new("L", size, 255))),
-                     ((128 - size[0]) // 2, (64 - size[1]) // 2))
-        return self.image(("pil", f"card_{cid}_{self.src.code}", canvas), c["line"])["label"]
+        at = ((128 - size[0]) // 2, (64 - size[1]) // 2)
+        canvas.paste(Image.merge("RGBA", (mono, mono, mono, Image.new("L", size, 255))), at)
+        label = self.image(("pil", f"card_{cid}_{self.src.code}", canvas), c["line"])["label"]
+        spec = self.g.greyscale.get(("card", cid))
+        if not spec:
+            return label, NONE24
+        layer = spec["layers"][0]
+        levels = orig.card_grey(np.asarray(bright, dtype=float), c["threshold"],
+                                layer.get("gamma", 1.0), layer.get("dither", False))
+        full = np.zeros((64, 128), dtype=np.uint8)
+        full[at[1]:at[1] + size[1], at[0]:at[0] + size[0]] = levels
+        return label, self.grey_image(f"card_{cid}_{self.src.code}_grey", [full], spec["line"])
+
+    def grey_image(self, key, frames, ln, mask=False, opaque=None):
+        """Graustufen (je Frame des 1-Bit-Bilds ein Array mit Stufen 0–3) als
+        Bild ablegen: Frame f wird zu den Frames 3f, 3f+1, 3f+2 (Ebene 0–2).
+        opaque: je Frame die deckenden Pixel (Figuren), sonst alle."""
+        h, w = frames[0].shape
+        planes = orig.GREY_PLANES
+        strip = Image.new("RGBA", (w * planes * len(frames), h))
+        for i, levels in enumerate(frames):
+            for p, plane in enumerate(orig.grey_planes(levels, opaque[i] if opaque else None)):
+                strip.paste(plane, ((i * planes + p) * w, 0))
+        self.grey_previews[key] = orig.grey_preview(np.hstack(frames))
+        return self.image(("pil", key, strip, (w, h)), ln, mask)["label"]
+
+    def figure_grey(self, sprite, ln):
+        """Figur in Graustufen (("grey", schlüssel, streifen, framebreite)
+        aus original.costume_frames) ablegen; None → NONE24."""
+        if not sprite:
+            return NONE24
+        _, key, strip, fw = sprite
+        frames = orig.figure_levels(strip, fw)
+        return self.grey_image(key, [lv for lv, _ in frames], ln, mask=True, opaque=[op for _, op in frames])
+
+    def grey_levels(self, spec, img, size, tone, channel):
+        try:
+            return orig.to_grey(img, size, spec["layers"], spec["subjects"], tone, channel)
+        except ValueError as e:
+            raise spec["line"].err(str(e))
+
+    def room_grey(self, rid, r):
+        """Graustufen-Hintergrund eines Raums (Label oder NONE24)."""
+        spec = self.g.greyscale.get(("room", rid))
+        if not spec:
+            return NONE24
+        size, black, white, _, channel = r["tone"]
+        levels = self.grey_levels(spec, r["composite"], size, (black, white), channel)
+        if r["dx"]:
+            padded = np.zeros((levels.shape[0], 128), dtype=np.uint8)
+            padded[:, r["dx"]:r["dx"] + levels.shape[1]] = levels
+            levels = padded
+        return self.grey_image(f"room{r['original'].number}_grey", [levels], spec["line"])
+
+    def place_grey(self, rid, r, p):
+        """Graustufen einer Tür oder eines Gegenstands: Ausschnitt der Kulisse
+        je Zustand, gerechnet wie der Hintergrund des Raums."""
+        spec = self.g.greyscale.get(("room", rid))
+        if not spec or not p["grey_from"]:
+            return NONE24
+        size, black, white, _, channel = r["tone"]
+        x, y, w, h = p["grey_from"]["box"]
+        frames = [self.grey_levels(spec, comp, size, (black, white), channel)[y:y + h, x:x + w]
+                  for comp in p["grey_from"]["states"]]
+        return self.grey_image(p["grey_from"]["key"] + "_grey", frames, p["line"], mask=True)
+
+    def title_grey(self):
+        spec = self.g.greyscale.get(("title", None))
+        if not spec:
+            return NONE24
+        src = self.g.title_source
+        levels = self.grey_levels(spec, src["image"], (src["width"], 64), src["tone"], "luminance")
+        full = np.zeros((64, 128), dtype=np.uint8)
+        at = (128 - src["width"]) // 2
+        full[:, at:at + src["width"]] = levels
+        return self.grey_image("title_grey", [full], spec["line"])
+
+    def check_greyscale(self):
+        g = self.g
+        for (kind, ident), spec in g.greyscale.items():
+            ln = spec["line"]
+            if kind == "room":
+                if ident not in g.rooms:
+                    raise ln.err(f"Raum '{ident}' unbekannt")
+                if not g.rooms[ident]["original"]:
+                    raise ln.err("greyscale room nur für Räume aus den Originaldaten")
+            elif kind == "card":
+                if ident not in g.cards:
+                    raise ln.err(f"Karte '{ident}' unbekannt")
+                if spec["subjects"] or len(spec["layers"]) != 1 or \
+                        set(spec["layers"][0]) - {"gamma", "dither"}:
+                    raise ln.err("greyscale card: genau eine layer-Zeile, nur gamma und dither "
+                                 "(die Karte ist Schrift, ihr Tonbereich ergibt sich daraus)")
+            elif not g.title_source:
+                raise ln.err("greyscale title nur für title original …")
 
     def image(self, src, ln, mask=False):
         """Bild aus einer PNG-Datei (Pfad) oder aus den Originaldaten
@@ -1825,7 +2071,7 @@ class Compiler:
                 if c["music"] not in self.g.music:
                     raise c["line"].err(f"Musik '{c['music']}' unbekannt")
                 music = self.g.music[c["music"]]["index"]
-            self.op("CARD", self.card_image(a[0]), music)
+            self.op("CARD", *self.card_image(a[0]), music)
         elif kw == "done":
             need(0, "done")
             if not getattr(self, "choose_end", None):
@@ -1862,6 +2108,7 @@ class Compiler:
             raise CompileError("String-Variablen höchstens 63 Zeichen")
 
         self.call_stack = self.call_depth()
+        self.check_greyscale()
         self.compile_shared()
         for src in g.languages:
             self.src = src
@@ -1873,6 +2120,7 @@ class Compiler:
         title = self.image(g.title, None) if g.title else None
         self.cursor_label = cursor["label"] if cursor else NONE24
         self.title_label = title["label"] if title else NONE24
+        self.title_grey_label = self.title_grey()
         for img in self.images.values():
             b.mark(img["label"])
             b.raw(img["data"])
@@ -1915,7 +2163,7 @@ class Compiler:
                 if not 0 <= f < img["frames"]:
                     raise a["line"].err(f"Frame {f} existiert nicht (Sprite hat {img['frames']})")
             obj = self.obj(a["line"], a["object"]) if a.get("object") else NONE8
-            b.record("ActorRec", sprite=img["label"],
+            b.record("ActorRec", sprite=img["label"], grey=self.figure_grey(a.get("grey"), a["line"]),
                      stand=a["stand"], walkFirst=first, walkCount=count, talk=a["talk"],
                      front=a["front"], frontTalk=a["fronttalk"], object=obj,
                      depth=f"depth_{aid}" if a.get("levels") else NONE24)
@@ -1923,14 +2171,16 @@ class Compiler:
             if not a.get("levels"):
                 continue
             # Absteigend: eine Stufe gilt, sobald die Größe unter der Mitte zwischen
-            # ihrem und dem nächstgrößeren Anteil liegt (u8 Schwelle, u24 Sprite).
+            # ihrem und dem nächstgrößeren Anteil liegt (u8 Schwelle, u24 Sprite,
+            # u24 Sprite in Graustufen).
             b.mark(f"depth_{aid}")
             b.put("u8", len(a["levels"]))
             prev = 1.0
-            for f, sprite in a["levels"]:
+            for f, sprite, grey in a["levels"]:
                 img = self.image(sprite, a["line"], mask=True)
                 b.put("u8", round((f + prev) / 2 * 255))
                 b.put("u24", img["label"])
+                b.put("u24", self.figure_grey(grey, a["line"]))
                 prev = f
 
         for rid, r in g.rooms.items():
@@ -1940,6 +2190,7 @@ class Compiler:
             r["width"] = bg["w"]
             r["height"] = bg["h"]
             r["bg_label"] = bg["label"]
+            r["grey_label"] = self.room_grey(rid, r)
             if not r["boxes"] and not r.get("blank"):
                 raise r["line"].err("Raum ohne Laufflächen (walkbox / walkboxes original)")
             if len(r["boxes"]) > 254:
@@ -1966,13 +2217,15 @@ class Compiler:
                     if img["frames"] % p["frames"]:
                         raise ln.err(f"frames {p['frames']} teilt die {img['frames']} Bilder nicht")
                     image = img["label"]
+                    grey = self.place_grey(rid, r, p) if p["grey_from"] else self.figure_grey(p["grey_sprite"], ln)
                 else:
                     if p["w"] is None:
                         raise ln.err("Hotspot ohne Bild braucht w h")
-                    w, h, image = p["w"], p["h"], NONE24
+                    w, h, image, grey = p["w"], p["h"], NONE24, NONE24
                 b.record("PlaceRec", object=oi, x=p["x"], y=p["y"], w=w, h=h,
                          walkX=p["walk"][0], walkY=p["walk"][1], face=p["face"],
-                         image=image, frames=p["frames"], speed=p["speed"])
+                         image=image, grey=grey, frames=p["frames"], speed=p["speed"],
+                         backdrop=p["backdrop"])
 
         b.mark("music")
         for mid in g.music:
@@ -2019,7 +2272,8 @@ class Compiler:
 
         b.mark(L("rooms"))
         for rid, r in g.rooms.items():
-            b.record("RoomRec", background=r["bg_label"], width=r["width"], height=r["height"],
+            b.record("RoomRec", background=r["bg_label"], grey=r["grey_label"],
+                     width=r["width"], height=r["height"],
                      boxCount=len(r["boxes"]), boxes=f"boxes_{rid}", matrix=f"matrix_{rid}",
                      placeCount=len(r["places"]), places=f"places_{rid}",
                      entry=L(f"entry_{rid}"))
@@ -2085,8 +2339,10 @@ class Compiler:
                     roomCount=len(g.rooms), rooms=L("rooms"),
                     musicCount=len(g.music), music="music",
                     startScript=L("start"), cursor=self.cursor_label, title=self.title_label,
+                    titleGrey=self.title_grey_label,
                     titleMusic=title_music, inventoryVerb=inventory_verb,
-                    uiSoundOn=ui["sound_on"], uiSoundOff=ui["sound_off"], uiEmpty=ui["empty"])
+                    uiSoundOn=ui["sound_on"], uiSoundOff=ui["sound_off"], uiEmpty=ui["empty"],
+                    uiGreyOn=ui["grey_on"], uiGreyOff=ui["grey_off"])
         return head
 
     def check(self):
@@ -2189,7 +2445,9 @@ def main():
         args.preview.mkdir(parents=True, exist_ok=True)
         for img in comp.images.values():
             if isinstance(img["source"], tuple):
-                img["source"][2].save(args.preview / f"{img['source'][1]}.png")
+                key = img["source"][1]
+                preview = comp.grey_previews[key] if key in comp.grey_previews else img["source"][2]
+                preview.save(args.preview / f"{key}.png")
     music = sum(len(m["notes"]) for m in game.music.values())
     langs = ", ".join(src.name for src in game.languages)
     print(f"advc: {len(data)} Bytes, Sprachen: {langs}, {len(game.rooms)} Raum/Räume, {len(game.objects)} Objekte, "

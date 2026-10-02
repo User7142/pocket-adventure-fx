@@ -4,18 +4,19 @@
 using uint24_t = __uint24;
 
 constexpr uint8_t dbmNormal = 0, dbmMasked = 1 << 4, dbmFlip = 1 << 5;  // Bits wie ArduboyFX
-constexpr bool CLEAR_BUFFER = true;
 
 namespace host {
   extern std::vector<uint8_t> flash;
   // Wird bei jedem Zeichenaufruf gemeldet (der Prüfstand findet so z. B. den Cursor).
   void drawn(int16_t x, int16_t y, uint32_t image, uint8_t frame);
-  void displayed(bool clear);  // Ende des Frames: Bild übernehmen
 }
 
 namespace FX {
   inline uint32_t cursor;
   inline void begin(uint16_t) {}
+  // Display und Flash teilen sich auf dem Gerät den SPI-Bus; hier ohne Wirkung.
+  inline void enableOLED() {}
+  inline void disableOLED() {}
   inline void readDataBytes(uint24_t address, uint8_t* buffer, size_t length) {
     for (size_t i = 0; i < length; ++i) {
       uint32_t a = uint32_t(address) + i;
@@ -67,5 +68,4 @@ namespace FX {
       }
     }
   }
-  inline void display(bool clear) { host::displayed(clear); }
 }

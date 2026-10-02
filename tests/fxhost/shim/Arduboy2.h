@@ -1,16 +1,20 @@
-// Host-Nachbildung des Arduboy2-API: nur, was die Engine benutzt. Zeichnen
-// ist wirkungslos; Tasten setzt der Prüfstand (host::buttons).
+// Host-Nachbildung des Arduboy2-API: nur, was die Engine benutzt. Gezeichnet
+// wird in host::screen; Tasten setzt der Prüfstand (host::buttons).
 #pragma once
 
 constexpr int16_t WIDTH = 128;
 constexpr int16_t HEIGHT = 64;
-constexpr uint8_t BLACK = 0, WHITE = 1;
+// Wie im Original Makros: ArduboyG ersetzt sie durch seine Graustufen.
+#define BLACK 0
+#define WHITE 1
 constexpr uint8_t LEFT_BUTTON = 0x20, RIGHT_BUTTON = 0x40, UP_BUTTON = 0x80, DOWN_BUTTON = 0x10,
                   A_BUTTON = 0x08, B_BUTTON = 0x04;
 constexpr uint16_t EEPROM_STORAGE_SPACE_START = 16;
 
 class __FlashStringHelper;
 #define F(s) (reinterpret_cast<const __FlashStringHelper*>(s))
+#define PROGMEM
+#define pgm_read_byte(p) (*reinterpret_cast<const uint8_t*>(p))
 
 namespace host {
   extern uint8_t buttons;  // gedrückte Tasten in diesem Frame
@@ -39,38 +43,59 @@ namespace host {
   }
 }
 
-class Arduboy2 {
+// Wie Print des Arduino-Kerns: Texte landen im virtuellen write(Puffer, n),
+// das ohne Überschreiben Zeichen für Zeichen write(c) aufruft.
+class Print {
+ public:
+  virtual ~Print() = default;
+  virtual size_t write(uint8_t c) = 0;
+  virtual size_t write(const uint8_t* s, size_t n) {
+    size_t done = 0;
+    while (n--) done += write(*s++);
+    return done;
+  }
+  size_t write(const char* s) { return write(reinterpret_cast<const uint8_t*>(s), std::strlen(s)); }
+  void print(const char* s) { write(s); }
+  void print(char c) { write(uint8_t(c)); }
+  void print(const __FlashStringHelper* s) { write(reinterpret_cast<const char*>(s)); }
+};
+
+class Arduboy2 : public Print {
  public:
   void begin() {}
-  void setFrameRate(uint8_t) {}
-  bool nextFrame() { ++frameCount; return true; }
   void pollButtons() { previous = current; current = host::buttons; }
   bool pressed(uint8_t b) { return (current & b) == b; }
   bool justPressed(uint8_t b) { return (current & b) && !(previous & b); }
 
-  // Text wie Arduboy2::write/drawChar: 5×8-Zeichen, 6 px Vorschub
-  void setCursor(int16_t x, int16_t y) { cx = x; cy = y; }
-  void setTextColor(uint8_t c) { color = c; }
-  void setTextBackground(uint8_t c) { background = c; }
-  size_t write(uint8_t c) {
-    if (c == '\n') {
-      cx = 0;
-      cy += 8;
-    } else if (c != '\r') {
-      const uint8_t* glyph = &host::font5x7[c * 5];
-      for (uint8_t i = 0; i < 6; ++i) {
-        uint8_t column = i < 5 ? glyph[i] : 0;
-        for (uint8_t j = 0; j < 8; ++j, column >>= 1) {
-          if ((column & 1) || background != color) host::pixel(cx + i, cy + j, (column & 1) ? color : background);
-        }
-      }
-      cx += 6;
+  // Text mit Textzustand wie in Arduboy2 (Cursor, Farben, Umbruch).
+  void setCursor(int16_t x, int16_t y) { cursor_x = x; cursor_y = y; }
+  void setTextColor(uint8_t c) { textColor = c; }
+  void setTextBackground(uint8_t c) { textBackground = c; }
+  using Print::write;
+  size_t write(uint8_t c) override {
+    if (c == '\r' && !textRaw) return 1;
+    if ((c == '\n' && !textRaw) || (textWrap && cursor_x > WIDTH - characterWidth)) {
+      cursor_x = 0;
+      cursor_y += fullCharacterHeight;
+    }
+    if (c != '\n' || textRaw) {
+      drawChar(cursor_x, cursor_y, c, textColor, textBackground);
+      cursor_x += fullCharacterWidth;
     }
     return 1;
   }
-  void print(const char* s) { while (*s) write(*s++); }
-  void print(char c) { write(c); }
-  void print(const __FlashStringHelper* s) { print(reinterpret_cast<const char*>(s)); }
+  // Wie Arduboy2::drawChar (Textgröße 1): Pixel für Pixel. Bleibt hier als
+  // Vorlage, an der der Prüfstand die schnelle Ausgabe der Engine misst.
+  static void drawChar(int16_t x, int16_t y, uint8_t c, uint8_t color, uint8_t bg) {
+    bool drawBackground = bg != color;
+    for (uint8_t i = 0; i < fullCharacterWidth; ++i) {
+      uint8_t column = i < characterWidth ? font5x7[c * characterWidth + i] : 0;
+      for (uint8_t j = 0; j < fullCharacterHeight; ++j, column >>= 1) {
+        if ((column & 1) || drawBackground) host::pixel(x + i, y + j, (column & 1) ? color : bg);
+      }
+    }
+  }
+  static uint8_t* getBuffer() { return host::screen; }
 
   void fillRect(int16_t x, int16_t y, uint8_t w, uint8_t h, uint8_t c = WHITE) {
     for (int16_t i = 0; i < w; ++i)
@@ -87,9 +112,15 @@ class Arduboy2 {
   void invert(bool on) { host::inverted = on; }
   uint16_t frameCount = 0;
   Arduboy2Audio audio;
+  static constexpr const uint8_t* font5x7 = host::font5x7;
+
+ protected:
+  static constexpr uint8_t characterWidth = 5, fullCharacterWidth = 6;
+  static constexpr uint8_t characterHeight = 8, fullCharacterHeight = 8;
+  static inline int16_t cursor_x = 0, cursor_y = 0;
+  static inline uint8_t textColor = WHITE, textBackground = BLACK;
+  static inline bool textWrap = false, textRaw = false;
 
  private:
   uint8_t current = 0, previous = 0;
-  int16_t cx = 0, cy = 0;
-  uint8_t color = WHITE, background = BLACK;
 };
