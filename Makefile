@@ -14,6 +14,7 @@
 #   make test       Compiler-Tests und Szenendurchläufe auf dem Host-Prüfstand
 #   make fxhost     nur den Host-Prüfstand bauen (build/fxhost)
 #   make upload     Sketch + FX-Entwicklungsdaten auf den Arduboy FX
+#   make TIMING=1 … mit Zeitanzeige je Ebene unten rechts (µs, Entwicklung)
 #   make clean
 
 -include config.mk
@@ -28,6 +29,9 @@ FXDIR       := $(SKETCH)/fxdata
 BUILD       := build
 
 SOURCES     := $(wildcard $(SKETCH)/*.cpp $(SKETCH)/*.h $(SKETCH)/*.ino)
+# Mitgelieferte Bibliotheken (ArduboyG: Graustufen; libraries/README.md)
+LIBRARIES   := libraries/ArduboyG
+LIB_SOURCES := $(shell find $(LIBRARIES) -type f)
 ASSETS      := game/game.adv $(shell find game/art -type f)
 # Frühere Variablen (eine Kopie je Sprache) gelten weiter.
 ORIGINALS   ?= $(strip $(ORIGINAL) $(ORIGINAL_DE))
@@ -60,8 +64,15 @@ $(FXDIR)/game.bin $(SKETCH)/gamedata.h &: $(ASSETS) $(ORIGINAL_FILES) $(ORIGINAL
 $(FXDIR)/fxdata.h: $(FXDIR)/fxdata.txt $(FXDIR)/game.bin | $(PYTHON)
 	$(PYTHON) tools/vendor/fxdata-build.py $(FXDIR)/fxdata.txt >/dev/null
 
-$(BUILD)/$(SKETCH).ino.hex: $(FXDIR)/fxdata.h $(SKETCH)/gamedata.h $(SOURCES)
-	$(ARDUINO_CLI) compile --fqbn $(FQBN) --warnings all --output-dir $(BUILD) $(SKETCH)
+# make TIMING=1: Zeitanzeige je Ebene für die Entwicklung (PocketAdventureFX.ino).
+# Wechselt die Einstellung, muss neu übersetzt werden (Stempel wie oben).
+TIMING_FLAGS := $(if $(TIMING),--build-property compiler.cpp.extra_flags=-DRENDER_TIMING)
+TIMING_STAMP := $(BUILD)/timing.txt
+$(shell echo '$(TIMING)' | cmp -s - $(TIMING_STAMP) || echo '$(TIMING)' > $(TIMING_STAMP))
+
+$(BUILD)/$(SKETCH).ino.hex: $(FXDIR)/fxdata.h $(SKETCH)/gamedata.h $(SOURCES) $(LIB_SOURCES) $(TIMING_STAMP)
+	$(ARDUINO_CLI) compile --fqbn $(FQBN) --warnings all $(addprefix --library ,$(LIBRARIES)) \
+	  $(TIMING_FLAGS) --output-dir $(BUILD) $(SKETCH)
 
 package: $(PACKAGE)
 
@@ -73,7 +84,7 @@ $(PACKAGE): $(BUILD)/$(SKETCH).ino.hex $(FXDIR)/fxdata.h tools/package.py | $(PY
 # ArduboyFX übersetzt (tests/fxhost). Ui.cpp bindet harness.cpp selbst ein.
 # Die Schrift kommt aus der Arduboy2-Bibliothek, die build.sh einrichtet.
 FXHOST      := $(BUILD)/fxhost
-FXHOST_SRC  := $(SKETCH)/World.cpp $(SKETCH)/Script.cpp tests/fxhost/harness.cpp
+FXHOST_SRC  := $(SKETCH)/World.cpp $(SKETCH)/Script.cpp $(SKETCH)/Display.cpp tests/fxhost/harness.cpp
 FXHOST_FONT := $(BUILD)/fxhost_font.cpp
 ARDUBOY2_DATA := $(firstword $(shell find $(BUILD)/arduino $(HOME)/Library/Arduino15 $(HOME)/.arduino15 \
                    -path '*Arduboy2/src/Arduboy2Data.cpp' 2>/dev/null))

@@ -133,7 +133,7 @@ namespace {
         if (Ui::ask()) x.wait = WAIT_CHOICE;
         break;
       case OP_CARD:
-        Ui::card(le24(op + 1), op[4]);
+        Ui::card(le24(op + 1), le24(op + 4), op[7]);
         x.wait = WAIT_CARD;
         break;
       case OP_WAITR: {

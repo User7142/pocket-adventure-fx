@@ -24,6 +24,10 @@
 //   seed <n>          Zufallsgenerator setzen
 //   pos <actor>       Position eines Actors ausgeben
 //   shot <datei.png>  aktuelles Bild speichern (4-fach vergrößert)
+//   grey              im Menü Graustufen an/aus umschalten
+//   drawcheck         Text und Rechtecke der Engine (Common.h) gegen die Pixel-Vorlage prüfen
+//   tones [x0 y0 x1 y1]  Pixel je Stufe im angezeigten Bild (schwarz … weiß),
+//                     wahlweise nur im Ausschnitt
 //   until <actor> <|> <x>   warten, bis der Actor im Raum ist und x (px) passt
 //
 // Ui.cpp wird hier eingebunden statt getrennt übersetzt: so sieht der
@@ -38,12 +42,13 @@ namespace host {
   uint8_t buttons;
   std::vector<uint8_t> flash;
   uint8_t screen[WIDTH * HEIGHT / 8];
-  uint8_t shown[WIDTH * HEIGHT / 8];  // zuletzt angezeigtes Bild
+  uint8_t shown[PLANES][WIDTH * HEIGHT / 8];  // zuletzt angezeigte Ebenen (ArduboyG)
   bool inverted;
 
-  void displayed(bool clear) {
-    std::memcpy(shown, screen, sizeof(shown));
-    if (clear) std::memset(screen, 0, sizeof(screen));
+  // Wie ArduboyG: Ebene übertragen, danach ist der Puffer leer.
+  void displayed(uint8_t plane) {
+    std::memcpy(shown[plane], screen, sizeof(screen));
+    std::memset(screen, 0, sizeof(screen));
   }
   bool cursorDrawn;
   int16_t drawnCursorX, drawnCursorY;
@@ -153,10 +158,12 @@ namespace {
     std::fflush(stdout);
   }
 
+  // Ein Frame: jede Ebene einmal zeichnen, dabei ein Schritt Spiellogik
+  // (shim/ArduboyG.h) – wie auf dem Gerät, nur ohne dessen Takt.
   void step(uint8_t pressed = 0) {
     host::buttons = pressed;
     host::cursorDrawn = false;
-    loop();
+    for (uint8_t p = 0; p < host::PLANES; ++p) loop();
     ++frame;
     report();
   }
@@ -171,7 +178,8 @@ namespace {
     std::exit(1);
   }
 
-  // Bild als PNG: Graustufen, 4-fach, damit es sich ansehen lässt.
+  // Bild als PNG, 4-fach, damit es sich ansehen lässt: je Pixel die Zahl der
+  // hellen Ebenen als Grauwert, so wie das Auge die drei Ebenen mischt.
   void png(const std::string& path) {
     constexpr int S = 4, W = WIDTH * S, H = HEIGHT * S;
     std::vector<uint8_t> raw;
@@ -179,8 +187,10 @@ namespace {
       raw.push_back(0);  // Filter: keiner
       for (int x = 0; x < W; ++x) {
         int px = x / S, py = y / S;
-        bool on = (host::shown[(py / 8) * WIDTH + px] >> (py & 7)) & 1;
-        raw.push_back(on != host::inverted ? 0xFF : 0x00);
+        uint8_t lit = 0;
+        for (uint8_t p = 0; p < host::PLANES; ++p) lit += (host::shown[p][(py / 8) * WIDTH + px] >> (py & 7)) & 1;
+        uint8_t grey = lit * 255 / host::PLANES;
+        raw.push_back(host::inverted ? 255 - grey : grey);
       }
     }
     uLongf len = compressBound(raw.size());
@@ -250,6 +260,134 @@ namespace {
     tap(A_BUTTON);
   }
 
+  // Zeile „Graustufen an/aus“ im Menü wählen.
+  void toggleGrey() {
+    idle();
+    tap(B_BUTTON);
+    if (!menuOpen) fail("Menü geht nicht auf");
+    for (uint8_t n = 0; menuRow != MENU_GREY_ROW; ++n) {
+      if (n > 40) fail("Graustufen-Zeile im Menü nicht erreichbar");
+      tap(menuRow < MENU_GREY_ROW ? DOWN_BUTTON : UP_BUTTON);
+    }
+    tap(A_BUTTON);
+    std::printf("greyscale %d\n", greyscale);
+  }
+
+  // Arduboy::write und Arduboy::fillRect (Common.h) arbeiten seitenweise auf
+  // dem Puffer; das Ergebnis muss Pixel für Pixel der Vorlage entsprechen
+  // (drawChar bzw. fillRect der Nachbildung, Pixel für Pixel) – für jedes
+  // Zeichen, jede Lage (auch angeschnitten), jede Farbe und ohne Nachbarpixel
+  // zu verändern (Puffer vorher gemustert).
+  void drawCheck() {
+    const uint8_t colors[][2] = {{WHITE, BLACK}, {BLACK, WHITE}, {WHITE, WHITE}, {BLACK, BLACK}};
+    uint8_t fast[sizeof(host::screen)], reference[sizeof(host::screen)];
+    uint32_t checked = 0;
+    for (auto [fg, bg] : colors)
+      for (int16_t y = -8; y <= HEIGHT; ++y)
+        for (int16_t x : {-3, 61, 125})
+          for (uint16_t c = 0; c < 256; ++c) {
+            for (size_t i = 0; i < sizeof(host::screen); ++i) host::screen[i] = uint8_t(0xA5 ^ i);
+            arduboy.setTextColor(fg);
+            arduboy.setTextBackground(bg);
+            arduboy.setCursor(x, y);
+            arduboy.write(uint8_t(c == '\n' || c == '\r' ? ' ' : c));
+            std::memcpy(fast, host::screen, sizeof(fast));
+            for (size_t i = 0; i < sizeof(host::screen); ++i) host::screen[i] = uint8_t(0xA5 ^ i);
+            Arduboy2::drawChar(x, y, uint8_t(c == '\n' || c == '\r' ? ' ' : c), fg, bg);
+            std::memcpy(reference, host::screen, sizeof(reference));
+            if (std::memcmp(fast, reference, sizeof(fast)))
+              fail("textcheck: Zeichen " + std::to_string(c) + " bei " + std::to_string(x) + "," +
+                   std::to_string(y) + " Farbe " + std::to_string(fg) + "/" + std::to_string(bg));
+            ++checked;
+          }
+    // Ganze Texte (print → write(Puffer, n)): Zeilenstücke, Umbrüche, Ränder
+    const char* texts[] = {"Hello, I'm Guybrush!", "Two\nlines\r here", "\n\nend", "",
+                           "A very long line that runs far past the right edge of the display"};
+    for (auto [fg, bg] : colors)
+      for (const char* t : texts)
+        for (int16_t y : {-9, -3, 0, 1, 7, 33, 60})
+          for (int16_t x : {-20, -1, 0, 5, 100}) {
+            for (size_t i = 0; i < sizeof(host::screen); ++i) host::screen[i] = uint8_t(0xA5 ^ i);
+            arduboy.setTextColor(fg);
+            arduboy.setTextBackground(bg);
+            arduboy.setCursor(x, y);
+            arduboy.print(t);
+            std::memcpy(fast, host::screen, sizeof(fast));
+            for (size_t i = 0; i < sizeof(host::screen); ++i) host::screen[i] = uint8_t(0xA5 ^ i);
+            arduboy.setCursor(x, y);
+            for (const char* c = t; *c; ++c) arduboy.Arduboy2::write(uint8_t(*c));
+            std::memcpy(reference, host::screen, sizeof(reference));
+            if (std::memcmp(fast, reference, sizeof(fast)))
+              fail(std::string("textcheck: Text \"") + t + "\" bei " + std::to_string(x) + "," + std::to_string(y));
+            ++checked;
+          }
+    arduboy.setTextColor(WHITE);
+    arduboy.setTextBackground(BLACK);
+    std::printf("textcheck %u\n", checked);
+
+    uint32_t rects = 0;
+    for (uint8_t c : {WHITE, BLACK})
+      for (int16_t y = -10; y <= HEIGHT; y += 1)
+        for (uint8_t h : {0, 1, 3, 7, 8, 9, 17, 64, 255})
+          for (int16_t x : {-5, 0, 37, 120})
+            for (uint8_t w : {0, 1, 6, 64, 255}) {
+              for (size_t i = 0; i < sizeof(host::screen); ++i) host::screen[i] = uint8_t(0x5A ^ i);
+              Arduboy::fillRect(x, y, w, h, c);
+              std::memcpy(fast, host::screen, sizeof(fast));
+              for (size_t i = 0; i < sizeof(host::screen); ++i) host::screen[i] = uint8_t(0x5A ^ i);
+              arduboy.Arduboy2::fillRect(x, y, w, h, c);
+              std::memcpy(reference, host::screen, sizeof(reference));
+              if (std::memcmp(fast, reference, sizeof(fast)))
+                fail("drawcheck: fillRect(" + std::to_string(x) + ", " + std::to_string(y) + ", " +
+                     std::to_string(w) + ", " + std::to_string(h) + ", " + std::to_string(c) + ")");
+              ++rects;
+            }
+    std::printf("rectcheck %u\n", rects);
+
+    // drawScreen liest bündige Seiten direkt aus dem Flash; jeder Raum an
+    // mehreren Stellen, 1 Bit und jede Graustufen-Ebene, wie FX::drawBitmap.
+    uint32_t screens = 0;
+    bool wasGrey = greyscale;
+    for (uint8_t r = 0; r < World::header.roomCount; ++r) {
+      RoomRec rec;
+      FX::readDataObject(World::header.rooms + uint24_t(r) * sizeof(RoomRec), rec);
+      for (int16_t sx : {0, (rec.width - WIDTH) / 2, rec.width - WIDTH})
+        for (int16_t sy = 0; sy <= rec.height - HEIGHT; sy += 8)
+          for (uint8_t mode = 0; mode < 1 + host::PLANES; ++mode) {
+            greyscale = mode > 0;
+            uint8_t plane = mode > 0 ? mode - 1 : 0;
+            while (arduboy.currentPlane() != plane) arduboy.waitForNextPlane();
+            std::memset(host::screen, 0x5A, sizeof(host::screen));
+            drawScreen(sx, sy, rec.background, rec.grey);
+            std::memcpy(fast, host::screen, sizeof(fast));
+            std::memset(host::screen, 0x5A, sizeof(host::screen));
+            bool grey = greyscale && rec.grey != NONE24;
+            FX::drawBitmap(-sx, -sy, grey ? rec.grey : rec.background, grey ? plane : 0, dbmNormal);
+            std::memcpy(reference, host::screen, sizeof(reference));
+            if (std::memcmp(fast, reference, sizeof(fast)))
+              fail("drawcheck: drawScreen Raum " + std::to_string(r) + " bei " + std::to_string(sx) + "," +
+                   std::to_string(sy) + " Modus " + std::to_string(mode));
+            ++screens;
+          }
+    }
+    greyscale = wasGrey;
+    std::memset(host::screen, 0, sizeof(host::screen));
+    std::printf("screencheck %u\n", screens);
+  }
+
+  // Wie viele Pixel des angezeigten Bilds in wie vielen Ebenen hell sind –
+  // 0 schwarz, 1 dunkelgrau, 2 hellgrau, 3 weiß.
+  void tones(int16_t x0 = 0, int16_t y0 = 0, int16_t x1 = WIDTH, int16_t y1 = HEIGHT) {
+    uint32_t count[host::PLANES + 1] = {};
+    for (int16_t y = y0; y < y1; ++y)
+      for (int16_t x = x0; x < x1; ++x) {
+        uint8_t lit = 0;
+        for (uint8_t p = 0; p < host::PLANES; ++p) lit += (host::shown[p][(y / 8) * WIDTH + x] >> (y & 7)) & 1;
+        ++count[lit];
+      }
+    std::printf("tones %u %u %u %u\n", count[0], count[1], count[2], count[3]);
+  }
+
   // Gegenstand im Inventar über das Menü wählen (Verb vorher gewählt).
   void pickInventory(uint8_t object) {
     uint8_t i = 0;
@@ -257,7 +395,7 @@ namespace {
     if (i == World::inventoryCount) fail("Gegenstand " + std::to_string(object) + " nicht im Inventar");
     tap(B_BUTTON);
     if (!menuOpen) fail("Menü geht nicht auf");
-    uint8_t row = MENU_VERB_ROWS + i / MENU_COLS, col = i % MENU_COLS;
+    uint8_t row = MENU_INV_ROW + i / MENU_COLS, col = i % MENU_COLS;
     for (uint8_t n = 0; menuRow != row || menuCol != col; ++n) {
       if (n > 60) fail("Gegenstand im Menü nicht erreichbar");
       if (menuRow < row) tap(DOWN_BUTTON);
@@ -427,6 +565,14 @@ int main(int argc, char** argv) {
         if (k > LIMIT) fail("until: Bedingung tritt nicht ein");
         step();
       }
+    } else if (cmd == "grey") {
+      toggleGrey();
+    } else if (cmd == "tones") {
+      int x0, y0, x1, y1;
+      if (ls >> x0 >> y0 >> x1 >> y1) tones(x0, y0, x1, y1);
+      else tones();
+    } else if (cmd == "drawcheck") {
+      drawCheck();
     } else if (cmd == "shot") {
       std::string path;
       ls >> path;

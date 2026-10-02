@@ -21,6 +21,12 @@ struct ActorState {
   uint8_t walkPhase;
   bool walking;
   uint8_t look;             // Actor-Definition, deren Grafik gezeigt wird (costume)
+  // Zeichenstand, je Logikschritt berechnet (World::prepare): Sprite der
+  // Größenstufe, Frame, Größe. draw() läuft je Ebene, dreimal so oft, und
+  // soll nur noch zeichnen.
+  uint24_t sprite;
+  uint8_t frame, w, h;
+  bool layered;  // sprite ist die Graustufen-Fassung (3 Frames je Frame)
 };
 
 // Objektzustand: ein Byte pro Objekt
@@ -55,6 +61,7 @@ namespace World {
   void reset();  // Spielstand für ein neues Spiel
   void loadRoom(uint8_t r);
   void update();
+  void prepare();  // Zeichenstand der Actors nach einem Logikschritt
   void draw();
 
   void put(uint8_t actor, uint16_t x, uint8_t y);

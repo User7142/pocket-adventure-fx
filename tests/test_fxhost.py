@@ -469,5 +469,59 @@ class Scenes(unittest.TestCase):
                     self.assertSubsequence(self.expected_lines(events, src), trace, scene, src.name)
 
 
+@unittest.skipUnless(HAVE_BUILD, "kein Build mit Originaldaten (make test baut ihn)")
+@unittest.skipIf(os.environ.get("MI_ARDENS"), "nur auf dem Host-Prüfstand (Bildzählung)")
+class Greyscale(unittest.TestCase):
+    """Graustufen: Das angezeigte Bild hat Grautöne (Pixel, die nur in einer
+    oder zwei der drei Ebenen hell sind); im Menü auf Schwarz-Weiß
+    umgeschaltet, ist jedes Pixel in allen Ebenen gleich."""
+
+    def tones(self, commands):
+        r = subprocess.run([str(HOST), str(GAME)], input=commands.encode(), capture_output=True, timeout=120)
+        out = r.stdout.decode("cp437")
+        if r.returncode or "FEHLER" in out:
+            self.fail(f"Prüfstand: Exit {r.returncode}\n{out[-2000:]}")
+        lines = [line for line in out.splitlines() if not line.startswith(">")]
+        tones = [tuple(map(int, line.split()[1:])) for line in lines if line.startswith("tones ")]
+        switched = [line for line in lines if line.startswith("greyscale ")]
+        return tones, switched
+
+    def test_fast_drawing_matches_pixel_by_pixel(self):
+        # Text und Rechtecke zeichnet die Engine seitenweise (Common.h:
+        # Arduboy::write, fillRect); der Prüfstand vergleicht mit der
+        # Pixel-für-Pixel-Vorlage.
+        r = subprocess.run([str(HOST), str(GAME)], input=b"drawcheck\n", capture_output=True, timeout=120)
+        out = r.stdout.decode("cp437")
+        self.assertEqual(r.returncode, 0, out[-2000:])
+        self.assertIn(f"textcheck {4 * 73 * 3 * 256 + 4 * 5 * 7 * 5}", out)
+        self.assertIn(f"rectcheck {2 * 75 * 9 * 4 * 5}", out)
+        self.assertRegex(out, r"screencheck [1-9]\d+")
+
+    def test_title_and_rooms_have_grey(self):
+        # Erst das Titelbild (vor jedem Tastendruck; im ersten Frame ist eine
+        # Ebene noch ungezeichnet), dann das Dock nach dem Vorspann
+        tones, _ = self.tones("frames 2\ntones\n" + START.replace("{lang}", "0") + "tones\n")
+        for name, (black, dark, light, white) in zip(("Titel", "Dock"), tones):
+            with self.subTest(name):
+                self.assertGreater(dark + light, 500, f"{name}: kaum Grau ({black}, {dark}, {light}, {white})")
+                self.assertGreater(white, 100, f"{name}: kaum Weiß ({black}, {dark}, {light}, {white})")
+
+    def test_speech_is_white_on_black(self):
+        # Text ohne eigene Farbe (Sprechblasen) muss in allen drei Ebenen
+        # stehen: ArduboyG-Weiß (3), nicht Arduboy2-Weiß (1) = Dunkelgrau.
+        # Der Vorspann zeigt nach 200 Frames eine Sprechblase oben.
+        tones, _ = self.tones("lang 0\nframes 200\ntones 12 0 116 24\n")
+        black, dark, light, white = tones[0]
+        self.assertEqual(dark + light, 0, f"Grau in der Sprechblase: {tones[0]}")
+        self.assertGreater(white, 300)
+
+    def test_menu_switches_to_black_and_white_and_back(self):
+        tones, switched = self.tones(START.replace("{lang}", "0") + "grey\nframes 1\ntones\ngrey\nframes 1\ntones\n")
+        self.assertEqual(switched, ["greyscale 0", "greyscale 1"])
+        mono, grey = tones
+        self.assertEqual(mono[1] + mono[2], 0, f"Schwarz-Weiß mit Grautönen: {mono}")
+        self.assertGreater(grey[1] + grey[2], 500, f"wieder Graustufen, aber kaum Grau: {grey}")
+
+
 if __name__ == "__main__":
     unittest.main()

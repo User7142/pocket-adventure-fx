@@ -210,44 +210,58 @@ namespace {
   }
 
   // Sprite für die Größe: Figuren mit Tiefe haben kleinere Stufen (advc.py:
-  // u8 Anzahl, je Stufe u8 Schwelle + u24 Sprite, absteigend).
-  uint24_t actorSprite(const ActorState& s, const ActorRec& rec) {
+  // u8 Anzahl, je Stufe u8 Schwelle + u24 Sprite + u24 Graustufen,
+  // absteigend). grey erhält die Graustufen-Fassung oder NONE24.
+  uint24_t actorSprite(const ActorState& s, const ActorRec& rec, uint24_t& grey) {
+    grey = rec.grey;
     if (rec.depth == NONE24) return rec.sprite;
     uint8_t scale = scaleAt(s);
     uint24_t sprite = rec.sprite;
     uint8_t n;
     FX::readDataObject(rec.depth, n);
     for (uint8_t i = 0; i < n; ++i) {
-      uint8_t level[4];
-      FX::readDataBytes(rec.depth + 1 + uint24_t(i) * 4, level, 4);
+      uint8_t level[7];
+      FX::readDataBytes(rec.depth + 1 + uint24_t(i) * 7, level, 7);
       if (scale >= level[0]) break;
       sprite = le24(level + 1);
+      grey = le24(level + 4);
     }
     return sprite;
   }
 
-  void drawActor(uint8_t a) {
-    const ActorState& s = World::actors[a];
+  // Sprite, Frame und Größe eines Actors für den aktuellen Zustand.
+  void prepareActor(uint8_t a) {
+    ActorState& s = World::actors[a];
     ActorRec rec;
     FX::readDataObject(World::header.actors + uint24_t(s.look) * sizeof(ActorRec), rec);
 
     bool talking = World::talker == a && (arduboy.frameCount & 8);
-    uint8_t frame;
     if (s.walking) {
-      frame = rec.walkFirst + (s.walkPhase / 6) % rec.walkCount;
+      s.frame = rec.walkFirst + (s.walkPhase / 6) % rec.walkCount;
     } else if (s.dir == DIR_FRONT) {
-      frame = talking ? rec.frontTalk : rec.front;
+      s.frame = talking ? rec.frontTalk : rec.front;
     } else {
-      frame = talking ? rec.talk : rec.stand;
+      s.frame = talking ? rec.talk : rec.stand;
     }
-
-    uint24_t sprite = actorSprite(s, rec);
+    uint24_t grey;
+    uint24_t mono = actorSprite(s, rec, grey);
+    // Graustufen: drei Frames je Frame, einer je Ebene (drawActor)
+    s.layered = greyscale && grey != NONE24;
+    s.sprite = s.layered ? grey : mono;
     uint16_t w, h;
-    spriteSize(sprite, w, h);
+    spriteSize(mono, w, h);
+    s.w = w;
+    s.h = h;
+  }
+
+  void drawActor(uint8_t a) {
+    const ActorState& s = World::actors[a];
     uint8_t mode = dbmMasked;
     if (s.dir == DIR_LEFT) mode |= dbmFlip;
     Pt p = position(s);
-    FX::drawBitmap(p.x - int16_t(w / 2) - World::scrollX, p.y - int16_t(h) + 1 - World::scrollY, sprite, frame, mode);
+    uint8_t frame = s.layered ? s.frame * 3 + arduboy.currentPlane() : s.frame;
+    FX::drawBitmap(p.x - int16_t(s.w / 2) - World::scrollX, p.y - int16_t(s.h) + 1 - World::scrollY,
+                   s.sprite, frame, mode);
   }
 
   // Kamera: folgt der Spielfigur, außer ein Skript schwenkt sie (pan).
@@ -346,8 +360,13 @@ void World::update() {
   updateCamera(false);
 }
 
+void World::prepare() {
+  for (uint8_t a = 0; a < ACTOR_COUNT; ++a)
+    if (actors[a].room == room) prepareActor(a);
+}
+
 void World::draw() {
-  FX::drawBitmap(-scrollX, -scrollY, roomRec.background, 0, dbmNormal);
+  drawScreen(scrollX, scrollY, roomRec.background, roomRec.grey);
 
   for (uint8_t i = 0; i < roomRec.placeCount; ++i) {
     PlaceRec p;
@@ -355,9 +374,12 @@ void World::draw() {
     // Dekoration (object == NONE8): nur Bild, immer Zustand 0.
     uint8_t flags = p.object == NONE8 ? 0 : objects[p.object];
     if (p.image == NONE24 || (flags & (OBJ_OWNED | OBJ_HIDDEN))) continue;
+    // Zustand 0 zeigt genau die Kulisse (geschlossene Tür): nichts zu tun –
+    // ein Sprite kostet je Ebene rund 0,4 ms.
+    if (p.backdrop && !(flags & OBJ_STATE)) continue;
     uint8_t frame = (flags & OBJ_STATE) * p.frames;
     if (p.frames > 1) frame += (arduboy.frameCount / p.speed) % p.frames;
-    FX::drawBitmap(int16_t(p.x) - scrollX, int16_t(p.y) - scrollY, p.image, frame, dbmMasked);
+    drawImage(int16_t(p.x) - scrollX, int16_t(p.y) - scrollY, p.image, p.grey, frame, dbmMasked);
   }
 
   // Actors nach Fußlinie sortiert: weiter vorne = später gezeichnet.
@@ -482,7 +504,8 @@ uint8_t World::hitTest(int16_t x, int16_t y) {
     if (actors[a].look != a)
       FX::readDataObject(header.actors + uint24_t(actors[a].look) * sizeof(ActorRec), rec);
     uint16_t w, h;
-    spriteSize(actorSprite(actors[a], rec), w, h);
+    uint24_t grey;
+    spriteSize(actorSprite(actors[a], rec, grey), w, h);
     Pt p = position(actors[a]);
     int16_t left = p.x - int16_t(w / 2);
     if (x >= left && x < left + int16_t(w) && y > p.y - int16_t(h) && y <= p.y) return object;
