@@ -1,16 +1,16 @@
-"""Szenendurchläufe auf dem Host-Prüfstand (tests/fxhost).
+"""Scene runs on the host test bench (tests/fxhost).
 
-Der Prüfstand führt die Engine mit dem gebauten game.bin aus und spielt per
-Tastendruck: Verben wählen, Cursor auf Objekte, klicken. Erwartet wird eine
-Folge von Ereignissen (Raum, Text, Dialogoption, Karte, Türzustand); Texte
-stehen hier nur als Verweise (r28.s215#1) und werden zur Laufzeit aus der
-eigenen Originalkopie aufgelöst – in jeder Sprache, die im Build steckt.
+The test bench runs the engine with the built game.bin and plays via
+key presses: pick verbs, cursor onto objects, click. Expected is a
+sequence of events (room, text, dialogue option, card, door state); texts
+appear here only as references (r28.s215#1) and are resolved at run time
+from your own copy of the game – in every language contained in the build.
 
-Aufruf: make test (baut Daten und Prüfstand vorher)
+Run: make test (builds data and test bench first)
 
-Dieselben Szenen laufen auch im Emulator Ardens, mit dem gebauten Paket
-(tests/ardens_run.py, in Echtzeit, entsprechend langsam):
-    MI_ARDENS=<Ardens-Web-Player> MI_ARDENS_PYTHON=<Python mit Playwright> \
+The same scenes also run in the Ardens emulator, with the built package
+(tests/ardens_run.py, in real time, correspondingly slow):
+    MI_ARDENS=<Ardens-Web-Player> MI_ARDENS_PYTHON=<Python with Playwright> \
         .venv/bin/python -m unittest tests.test_fxhost
 """
 import os
@@ -39,7 +39,7 @@ STAMP = ROOT / "build" / "originals.txt"
 
 
 def constants():
-    """Namen → Nummern aus gamedata.h (VERB_, OBJ_, ACTOR_, ROOM_)."""
+    """Names → numbers from gamedata.h (VERB_, OBJ_, ACTOR_, ROOM_)."""
     out = {}
     for kind, name, value in re.findall(r"constexpr uint8_t (VERB|OBJ|ACTOR|ROOM)_(\w+) = (\d+);",
                                         HEADER.read_text()):
@@ -48,7 +48,7 @@ def constants():
 
 
 def languages():
-    """Originalkopien in der Reihenfolge des Builds (= Sprachauswahl)."""
+    """Copies of the game in build order (= language selection)."""
     if not STAMP.exists():
         return []
     return [Path(p) for p in STAMP.read_text().split()]
@@ -57,10 +57,10 @@ def languages():
 HAVE_BUILD = HOST.exists() and GAME.exists() and HEADER.exists() and languages()
 
 
-# --- Ereignisse ---------------------------------------------------------------
+# --- Events -------------------------------------------------------------------
 #
-# Erwartungen sind Tupel; say/option nehmen einen Textverweis, der je Sprache
-# in seine Sprechblasen aufgelöst wird.
+# Expectations are tuples; say/option take a text reference that is resolved
+# into its speech bubbles per language.
 
 def say(actor, ref):
     return ("say", actor, ref)
@@ -89,10 +89,10 @@ def gone(actor):
 CARD = ("card",)
 
 
-# --- Szenen -------------------------------------------------------------------
+# --- Scenes -------------------------------------------------------------------
 #
-# Befehle des Prüfstands (siehe harness.cpp); Namen in {…} werden über
-# gamedata.h zu Nummern: {o:bar_door}, {v:open}, {a:cook}.
+# Test bench commands (see harness.cpp); names in {…} become numbers via
+# gamedata.h: {o:bar_door}, {v:open}, {a:cook}.
 
 START = """
 lang {lang}
@@ -119,15 +119,15 @@ do {v:walk} {o:shop_door}
 idle
 """
 
-# Vor der Küchentür, Verb gewählt, Cursor auf der Tür: Dann lässt sich auf
-# den Koch warten und im richtigen Moment klicken.
+# In front of the kitchen door, verb picked, cursor on the door: then we can
+# wait for the cook and click at the right moment.
 AT_KITCHEN = INTO_BAR + """
 walk 230 58
 verb {v:open}
 aim {o:kitchen_door}
 """
 
-# Nach dem Vorspann wieder hinauf zum Ausguck
+# After the intro back up to the lookout
 AT_LOOKOUT = START + """
 do {v:walk} {o:cliffside}
 idle
@@ -137,12 +137,12 @@ LOOKOUT_TALK = [say("guybrush", f"r38.s203#{i}") if i in (1, 3, 5, 8, 10, 12) el
                 for i in range(1, 13)]
 
 SCENES = {
-    # Vorspann bis zum Dock: Gespräch mit dem Ausguck, Kapitelkarte mit Musik
+    # Intro up to the dock: talk with the lookout, chapter card with music
     "intro": (START, [room("lookout"), *LOOKOUT_TALK, ("music", "part1_music"), CARD, room("dock")]),
 
-    # Späteres Gespräch mit dem Ausguck (r38.s202): Smalltalk, Schreck, Name
-    # (der falsche Name #17), wer er ist, dann Gouverneur und Blindheit – danach ist er
-    # beschäftigt.
+    # Later talk with the lookout (r38.s202): small talk, fright, name
+    # (the wrong name #17), who he is, then governor and blindness – after that he is
+    # busy.
     "lookout_talk": (AT_LOOKOUT + """
 do {v:talk} {o:old_man}
 choose 3
@@ -164,7 +164,7 @@ idle
       say("lookout", "r38.s202#41"), say("lookout", "r38.s202#42"), say("guybrush", "r38.s202#40"),
       say("lookout", "r38.s202#49"), say("lookout", "r38.s202#4")]),
 
-    # Wiedersehen (#11) mit verballhorntem Namen (s141).
+    # Reunion (#11) with mangled name (s141).
     "lookout_again": (AT_LOOKOUT + """
 do {v:talk} {o:old_man}
 choose 0
@@ -177,8 +177,8 @@ idle
 """, [say("lookout", "r38.s202#49"), say("guybrush", "r38.s202#6"), say("lookout", "r38.s202#10"),
       say("lookout", "r38.s202#11"), option("r38.s202#14"), say("lookout", "r38.s202#49")]),
 
-    # Stadtstraße (Raum 35): Uhr, Schild, gesperrter Torbogen zur Hauptstraße,
-    # Rückweg zum Dock.
+    # Town street (room 35): clock, sign, blocked archway to the high street,
+    # way back to the dock.
     "street": (START + """
 do {v:walk} {o:archway}
 idle
@@ -197,7 +197,7 @@ idle
 """, [room("street"), say("guybrush", "r35.s210#1"), say("guybrush", "o451#1"), narrator("ui.not_included"),
       room("dock"), room("street"), say("guybrush", "r35.s210#2")]),
 
-    # Voodoo-Lady (r29.s210): Name, Huhn, Zukunft; danach ist sie fort.
+    # Voodoo lady (r29.s210): name, chicken, future; then she is gone.
     "voodoo": (TO_SHOP + """
 do {v:look} {o:chicken}
 idle
@@ -218,7 +218,7 @@ idle
       say("voodoo", "r29.s210#20"), say("voodoo", "r29.s210#29"), say("voodoo", "r29.s210#45"),
       gone("voodoo"), say("guybrush", "r29.s210#46"), option("r29.s210#48"), say("guybrush", "r29.s210#51")]),
 
-    # Die Piraten (r35.s216): Kartenangebot, Protokoll gegen zwei Achterstücke.
+    # The pirates (r35.s216): map offer, minutes for two pieces of eight.
     "men": (IN_STREET + """
 walk 50 60
 do {v:talk} {o:men_obj}
@@ -231,8 +231,8 @@ idle
 """, [say("guybrush", "r35.s216#8"), say("men", "r35.s216#18"), say("men", "r35.s216#22"),
       say("men", "r35.s216#28"), say("guybrush", "o497#2")]),
 
-    # Die Ratte (s214/s215): Zeiger auf die Ratte, nah dran – fünfmal, dann
-    # läuft sie davon.
+    # The rat (s214/s215): pointer on the rat, close by – five times, then
+    # it runs away.
     "rat": (IN_STREET + """
 walk 40 60
 """ + "frames 30\naim {o:rat_obj}\nidle\naim {o:men_obj}\n" * 5 + """
@@ -240,7 +240,7 @@ idle
 """, [say("men", "r35.s215#1"), say("men", "r35.s215#2"), say("men", "r35.s215#3"), say("men", "r35.s215#4"),
       say("men", "r35.s215#6"), gone("rat")]),
 
-    # Der Kartenverkäufer (r35.s218): Cousin Sven, dann das Angebot.
+    # The map seller (r35.s218): cousin Sven, then the offer.
     "citizen": (IN_STREET + """
 do {v:talk} {o:citizen_obj}
 choose 3
@@ -253,8 +253,8 @@ idle
       say("citizen", "r35.s218#35"), say("citizen", "r35.s218#1"), say("citizen", "r35.s218#3"),
       say("citizen", "r35.s218#38")]),
 
-    # Karte von Mêlée (Raum 85): über den Pfad am Ausguck; nur Dorf und
-    # Ausguck lassen sich betreten.
+    # Map of Mêlée (room 85): via the path at the lookout; only village and
+    # lookout can be entered.
     "map": (START + """
 do {v:walk} {o:cliffside}
 idle
@@ -273,7 +273,7 @@ idle
 """, [room("lookout"), room("map"), ("music", "map_music"), narrator("ui.not_included"), narrator("ui.not_included"),
       room("lookout"), room("map"), room("dock")]),
 
-    # Die Bartür muss man erst öffnen (o437); geschlossen passiert nichts.
+    # The bar door must be opened first (o437); closed, nothing happens.
     "bar_door": (START + """
 do {v:walk} {o:bar_entrance}
 idle
@@ -283,9 +283,9 @@ do {v:walk} {o:bar_entrance}
 idle
 """, [state("bar_entrance", 1), state("bar_door", 1), room("scummbar")]),
 
-    # Piratendialog (r28.s220): erst die Frage #12, nach Antwort #14 die
-    # drei Prüfungen und gleich die Fragen; gefragte Themen heißen danach
-    # #48 statt #47 usw., #56 und #57 verschwinden.
+    # Pirate dialogue (r28.s220): first question #12, after answer #14 the
+    # three trials and straight on the questions; asked topics are then
+    # #48 instead of #47 etc., #56 and #57 disappear.
     "leaders": (INTO_BAR + """
 do {v:talk} {o:leaders_obj}
 choose 1
@@ -309,8 +309,8 @@ idle
       say("guybrush", "r28.s220#58"), say("leaders", "r28.s220#107"),
       say("leaders", "r28.s220#3"), option("r28.s220#48"), say("leaders", "r28.s220#106")]),
 
-    # Beim ersten Verlassen der Bar (Bit 446): s117, das Geisterschiff. Beim
-    # zweiten Mal geht es direkt aufs Dock.
+    # On first leaving the bar (bit 446): s117, the ghost ship. The
+    # second time it goes straight to the dock.
     "ghost_ship": (INTO_BAR + """
 do {v:open} {o:bar_door}
 idle
@@ -325,8 +325,8 @@ idle
       say("ghost", "s117#16"), say("lechuck", "s117#18"), say("ghost", "s117#19"), room("dock"),
       room("scummbar"), room("dock")]),
 
-    # Koch in der Küche (s211): Tür geht auf, Ruf von drinnen, Tür zu (s214);
-    # in den zehn Sekunden danach (s212) lässt sie sich öffnen.
+    # Cook in the kitchen (s211): door opens, call from inside, door shut (s214);
+    # in the ten seconds after that (s212) it can be opened.
     "kitchen_called": (INTO_BAR + """
 do {v:open} {o:kitchen_door}
 idle
@@ -338,7 +338,7 @@ idle
 """, [state("kitchen_door", 1), narrator("r28.s214#1"), state("kitchen_door", 0),
       state("kitchen_door", 1), room("kitchen")]),
 
-    # Koch draußen und weit weg (s203): Er bleibt stehen, die Tür geht auf.
+    # Cook outside and far away (s203): he stops, the door opens.
     "kitchen_sneak": (AT_KITCHEN + """
 until {a:cook} < 120
 click
@@ -347,7 +347,7 @@ do {v:walk} {o:kitchen_door}
 idle
 """, [state("kitchen_door", 1), room("kitchen")]),
 
-    # Koch draußen und nah (s215): Warnung, dann zurück.
+    # Cook outside and close (s215): warning, then back.
     "kitchen_caught": (AT_KITCHEN + """
 until {a:cook} < 200
 until {a:cook} > 200
@@ -363,8 +363,8 @@ class Scenes(unittest.TestCase):
     def setUpClass(cls):
         cls.names = constants()
         cls.sources = [textsource.TextSource(d) for d in languages()]
-        # String-Variablen (z. B. der Name beim Ausguck) wie beim Bauen: aus
-        # game.adv, damit Texte mit Platzhaltern genauso umbrechen.
+        # String variables (e.g. the name at the lookout) as in the build: from
+        # game.adv, so texts with placeholders wrap the same way.
         game = advc.Game(ROOT / "game")
         game.original_dir = languages()[0]
         game.languages = cls.sources
@@ -414,7 +414,7 @@ class Scenes(unittest.TestCase):
                     line = f"say {who} {b.replace(chr(10), ' ')}"
                     marker = f"[{re.escape(scumm_text.STRING_VAR + scumm_text.INT_VAR)}]."
                     if re.search(marker, line):
-                        # Variable (der verballhornte Name, das Geld): ein Wort beliebigen Inhalts
+                        # variable (the mangled name, the money): one word of any content
                         parts = re.split(marker, line)
                         out.append(("re", re.compile(r"\S+".join(map(re.escape, parts)) + "$")))
                     else:
@@ -472,9 +472,9 @@ class Scenes(unittest.TestCase):
 @unittest.skipUnless(HAVE_BUILD, "kein Build mit Originaldaten (make test baut ihn)")
 @unittest.skipIf(os.environ.get("MI_ARDENS"), "nur auf dem Host-Prüfstand (Bildzählung)")
 class Greyscale(unittest.TestCase):
-    """Graustufen: Das angezeigte Bild hat Grautöne (Pixel, die nur in einer
-    oder zwei der drei Ebenen hell sind); im Menü auf Schwarz-Weiß
-    umgeschaltet, ist jedes Pixel in allen Ebenen gleich."""
+    """Greyscale: the displayed image has grey tones (pixels lit in only one
+    or two of the three planes); switched to black and white in the
+    menu, every pixel is the same in all planes."""
 
     def tones(self, commands):
         r = subprocess.run([str(HOST), str(GAME)], input=commands.encode(), capture_output=True, timeout=120)
@@ -487,9 +487,9 @@ class Greyscale(unittest.TestCase):
         return tones, switched
 
     def test_fast_drawing_matches_pixel_by_pixel(self):
-        # Text und Rechtecke zeichnet die Engine seitenweise (Common.h:
-        # Arduboy::write, fillRect); der Prüfstand vergleicht mit der
-        # Pixel-für-Pixel-Vorlage.
+        # The engine draws text and rectangles page-wise (Common.h:
+        # Arduboy::write, fillRect); the test bench compares with the
+        # pixel-by-pixel reference.
         r = subprocess.run([str(HOST), str(GAME)], input=b"drawcheck\n", capture_output=True, timeout=120)
         out = r.stdout.decode("cp437")
         self.assertEqual(r.returncode, 0, out[-2000:])
@@ -498,8 +498,8 @@ class Greyscale(unittest.TestCase):
         self.assertRegex(out, r"screencheck [1-9]\d+")
 
     def test_title_and_rooms_have_grey(self):
-        # Erst das Titelbild (vor jedem Tastendruck; im ersten Frame ist eine
-        # Ebene noch ungezeichnet), dann das Dock nach dem Vorspann
+        # First the title screen (before any key press; in the first frame one
+        # plane is still undrawn), then the dock after the intro
         tones, _ = self.tones("frames 2\ntones\n" + START.replace("{lang}", "0") + "tones\n")
         for name, (black, dark, light, white) in zip(("Titel", "Dock"), tones):
             with self.subTest(name):
@@ -507,9 +507,9 @@ class Greyscale(unittest.TestCase):
                 self.assertGreater(white, 100, f"{name}: kaum Weiß ({black}, {dark}, {light}, {white})")
 
     def test_speech_is_white_on_black(self):
-        # Text ohne eigene Farbe (Sprechblasen) muss in allen drei Ebenen
-        # stehen: ArduboyG-Weiß (3), nicht Arduboy2-Weiß (1) = Dunkelgrau.
-        # Der Vorspann zeigt nach 200 Frames eine Sprechblase oben.
+        # Text without its own colour (speech bubbles) must be in all three
+        # planes: ArduboyG white (3), not Arduboy2 white (1) = dark grey.
+        # The intro shows a speech bubble at the top after 200 frames.
         tones, _ = self.tones("lang 0\nframes 200\ntones 12 0 116 24\n")
         black, dark, light, white = tones[0]
         self.assertEqual(dark + light, 0, f"Grau in der Sprechblase: {tones[0]}")

@@ -1,20 +1,20 @@
-// Host-Nachbildung des ArduboyFX-API: der FX-Flash ist game.bin im Speicher.
+// Host stand-in for the ArduboyFX API: the FX flash is game.bin in memory.
 #pragma once
 
 using uint24_t = __uint24;
 
-constexpr uint8_t dbmNormal = 0, dbmMasked = 1 << 4, dbmFlip = 1 << 5;  // Bits wie ArduboyFX
+constexpr uint8_t dbmNormal = 0, dbmMasked = 1 << 4, dbmFlip = 1 << 5;  // bits as in ArduboyFX
 
 namespace host {
   extern std::vector<uint8_t> flash;
-  // Wird bei jedem Zeichenaufruf gemeldet (der Prüfstand findet so z. B. den Cursor).
+  // Reported on every draw call (this is how the test bench finds e.g. the cursor).
   void drawn(int16_t x, int16_t y, uint32_t image, uint8_t frame);
 }
 
 namespace FX {
   inline uint32_t cursor;
   inline void begin(uint16_t) {}
-  // Display und Flash teilen sich auf dem Gerät den SPI-Bus; hier ohne Wirkung.
+  // Display and flash share the SPI bus on the device; no effect here.
   inline void enableOLED() {}
   inline void disableOLED() {}
   inline void readDataBytes(uint24_t address, uint8_t* buffer, size_t length) {
@@ -34,7 +34,7 @@ namespace FX {
     cursor += 1;
     return v;
   }
-  inline uint16_t readPendingUInt16() {  // big-endian wie das Original
+  inline uint16_t readPendingUInt16() {  // big-endian like the original
     uint16_t hi = readPendingUInt8();
     return (hi << 8) | readPendingUInt8();
   }
@@ -42,8 +42,8 @@ namespace FX {
   inline uint8_t readPendingLastUInt8() { return readPendingUInt8(); }
   inline void readEnd() {}
 
-  // Wie FX::drawBitmap: Bild in Seiten à 8 Zeilen, Spalte für Spalte; mit
-  // Maske je Bildbyte ein Maskenbyte dahinter; dbmFlip spiegelt waagerecht.
+  // Like FX::drawBitmap: image in pages of 8 rows, column by column; with a
+  // mask, one mask byte after each image byte; dbmFlip mirrors horizontally.
   inline void drawBitmap(int16_t x, int16_t y, uint24_t image, uint8_t frame, uint8_t mode) {
     host::drawn(x, y, image, frame);
     seekData(image);

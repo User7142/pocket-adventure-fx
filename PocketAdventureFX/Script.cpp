@@ -6,26 +6,26 @@
 namespace {
   enum Wait : uint8_t { WAIT_NONE, WAIT_WALK, WAIT_TEXT, WAIT_FRAMES, WAIT_CHOICE, WAIT_CARD, WAIT_CAMERA };
 
-  // Schutz gegen Endlosschleifen ohne blockierenden Befehl: nach so vielen
-  // Befehlen gibt der Interpreter den Frame ab und macht im nächsten weiter.
+  // Guard against endless loops without a blocking command: after this many
+  // commands the interpreter yields the frame and continues in the next one.
   constexpr uint8_t STEPS_PER_FRAME = 32;
 
-  // Ein Ablauf: Vordergrund (Skript, sperrt die Eingabe) oder Hintergrund
-  // (routine in game.adv, läuft neben dem Spiel, ruht während Skripten).
+  // An execution context: foreground (script, locks input) or background
+  // (routine in game.adv, runs alongside the game, pauses during scripts).
   struct Context {
     uint24_t pc = NONE24;
-    // Rücksprünge: call ruft ein Unterprogramm auf, ROOM das Entry-Skript des
-    // neuen Raums. Die nötige Tiefe berechnet advc.py (CALL_DEPTH).
+    // Return addresses: call invokes a subroutine, ROOM the entry script of the
+    // new room. advc.py computes the required depth (CALL_DEPTH).
     uint24_t stack[CALL_DEPTH];
     uint8_t sp = 0;
-    uint24_t origin = NONE24;  // Anfang des Ablaufs (Hintergrund: zum Wiederfinden für stop)
+    uint24_t origin = NONE24;  // start of the context (background: to find it again for stop)
     Wait wait = WAIT_NONE;
     uint8_t waitActor;
     uint16_t waitFrames;
   };
-  // Vordergrund (Verbskripte, Szenen) und Hintergrundabläufe (routine): im
-  // Original Raumskripte, die nebeneinander laufen – etwa die Ratten-Wache und
-  // der Papagei in der Stadtstraße. Sie ruhen, solange der Vordergrund läuft.
+  // Foreground (verb scripts, scenes) and background routines (routine): in the
+  // original, room scripts running side by side – e.g. the rat guard and
+  // the parrot in the town street. They pause while the foreground runs.
   constexpr uint8_t ROUTINES = 2;
   Context fg, bg[ROUTINES];
 
@@ -40,7 +40,7 @@ namespace {
   }
 
   bool condition(uint8_t kind, uint8_t index) {
-    // „open“: Objektzustand ≠ 0 (Türen: 0 = zu, 1 = auf, wie im Original)
+    // “open”: object state ≠ 0 (doors: 0 = closed, 1 = open, as in the original)
     uint8_t k = kind & ~COND_NOT;
     bool v = k == COND_HAS     ? World::has(index)
              : k == COND_OPEN  ? (World::objects[index] & OBJ_STATE) != 0
@@ -52,7 +52,7 @@ namespace {
   void step(Context& x) {
     uint8_t op[OP_MAX_LENGTH];
     FX::readDataBytes(x.pc, op, sizeof(op));
-    if (op[0] >= sizeof(OP_LENGTH)) {  // defekte Daten: Skript beenden statt Amok
+    if (op[0] >= sizeof(OP_LENGTH)) {  // corrupt data: end the script instead of running amok
       x.pc = NONE24;
       x.sp = 0;
       return;
@@ -64,7 +64,7 @@ namespace {
         next = x.sp ? x.stack[--x.sp] : NONE24;
         break;
       case OP_CALL:
-        x.stack[x.sp++] = next;  // advc.py sorgt für sp < CALL_DEPTH
+        x.stack[x.sp++] = next;  // advc.py ensures sp < CALL_DEPTH
         next = le24(op + 1);
         break;
       case OP_SAY:
@@ -129,7 +129,7 @@ namespace {
         Ui::addChoice(le24(op + 1), le24(op + 4));
         break;
       case OP_ASK:
-        // Ohne sichtbare Option geht es direkt weiter (Sprung ans Dialogende).
+        // Without a visible option execution continues directly (jump to the dialogue end).
         if (Ui::ask()) x.wait = WAIT_CHOICE;
         break;
       case OP_CARD:
@@ -151,8 +151,8 @@ namespace {
         break;
       }
       case OP_PLAY:
-        // Aus einem Hintergrundablauf: die Szene läuft im Vordergrund, der
-        // Ablauf ruht derweil (update() führt ihn nur ohne Vordergrund aus).
+        // From a background routine: the scene runs in the foreground, the
+        // routine pauses meanwhile (update() only runs it without a foreground).
         begin(fg, le24(op + 1));
         break;
       case OP_LETR: {
@@ -164,14 +164,14 @@ namespace {
         World::strings[op[1]][op[2]] = World::vars[op[3]];
         break;
       case OP_START: {
-        // Läuft der Ablauf schon, beginnt er von vorn; sonst ein freier Platz.
+        // If the routine is already running, it restarts; otherwise a free slot.
         uint24_t a = le24(op + 1);
         Context* slot = nullptr;
         for (Context& c : bg)
           if (c.pc != NONE24 && c.origin == a) slot = &c;
         for (Context& c : bg)
           if (!slot && c.pc == NONE24) slot = &c;
-        if (slot) begin(*slot, a);  // advc.py prüft, dass nie mehr als ROUTINES laufen
+        if (slot) begin(*slot, a);  // advc.py checks that never more than ROUTINES are running
         break;
       }
       case OP_STOP:
@@ -217,9 +217,9 @@ namespace {
         World::strings[op[1]][op[2]] = op[3];
         break;
       case OP_ROOM:
-        // Raum laden, Spielfigur an die Ankunftsstelle, dann das Entry-Skript
-        // des Raums ausführen und danach hier weitermachen. Ein Hintergrund-
-        // ablauf gehört zum alten Raum und endet (wie Raumskripte im Original).
+        // Load the room, put the player character at the arrival point, then run the
+        // room's entry script and continue here afterwards. A background routine
+        // belongs to the old room and ends (like room scripts in the original).
         stopAll();
         World::loadRoom(op[1]);
         if (le16(op + 2) != 0xFFFF) {
@@ -253,8 +253,8 @@ void Script::chosen(uint24_t target) {
 }
 
 namespace {
-  // Einen Ablauf weiterführen: Warten prüfen, dann Befehle bis zum nächsten
-  // blockierenden Befehl.
+  // Continue a context: check the wait condition, then run commands up to the
+  // next blocking command.
   void run(Context& ctx) {
     switch (ctx.wait) {
       case WAIT_WALK:
@@ -267,7 +267,7 @@ namespace {
         if (--ctx.waitFrames) return;
         break;
       case WAIT_CHOICE:
-        return;  // chosen() setzt fort
+        return;  // chosen() resumes
       case WAIT_CARD:
         if (Ui::showingCard()) return;
         break;
@@ -284,7 +284,7 @@ namespace {
 
 void Script::update() {
   run(fg);
-  // Der Hintergrund ruht, solange ein Skript läuft (Zwischensequenz, Dialog).
+  // The background pauses while a script is running (cutscene, dialogue).
   for (Context& c : bg)
     if (fg.pc == NONE24 && c.pc != NONE24) run(c);
 }

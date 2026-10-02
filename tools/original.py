@@ -1,17 +1,17 @@
-"""Aufbereitung der Original-Grafiken für das 128×64-Schwarz-Weiß-Display.
+"""Preparation of the original graphics for the 128×64 black-and-white display.
 
-Die Hintergründe von Monkey Island sind dunkle 256-Farben-Bilder (der
-Nachthimmel des Aussichtspunkts liegt bei einer Helligkeit um 20 von 255,
-die hellsten Steine um 100). Eine einfache Kontrastanpassung rastert darum
-den ganzen Himmel zu grauem Rauschen. Stattdessen:
+The Monkey Island backgrounds are dark 256-colour images (the night sky
+of the lookout point sits at a brightness around 20 of 255, the brightest
+stones around 100). A simple contrast adjustment therefore dithers the
+whole sky into grey noise. Instead:
 
-  1. Flächenmittel auf Zielgröße verkleinern (BOX-Filter),
-  2. Helligkeit mit warmer Gewichtung (Stein und Feuer hell, blaue Nacht
-     dunkel),
-  3. lokalen Kontrast verstärken (Abstand zum weichgezeichneten Bild),
-  4. Tonwertbereich [schwarz, weiß] pro Raum auf 0–255 ziehen,
-  5. Atkinson-Rasterung: Sie verteilt nur 6/8 des Fehlers und lässt große
-     dunkle Flächen dadurch sauber schwarz statt verrauscht.
+  1. downscale to the target size by area average (BOX filter),
+  2. brightness with warm weighting (stone and fire bright, blue night
+     dark),
+  3. boost local contrast (difference to the blurred image),
+  4. stretch the tone range [black, white] per room to 0–255,
+  5. Atkinson dithering: it spreads only 6/8 of the error and thus keeps
+     large dark areas cleanly black instead of noisy.
 """
 import numpy as np
 from PIL import Image, ImageFilter
@@ -41,9 +41,9 @@ def _atkinson(values):
     return out
 
 
-# Woraus die Helligkeit kommt: gewichtete Luminanz oder ein Farbkanal. Ein
-# Kanal trennt Flächen gleicher Helligkeit, aber verschiedener Farbe, etwa
-# das blaue Geisterschiff vor der roten Lava (Raum 70).
+# Where the brightness comes from: weighted luminance or a colour channel. A
+# channel separates areas of equal brightness but different colour, e.g.
+# the blue ghost ship in front of the red lava (room 70).
 CHANNELS = ("luminance", "red", "green", "blue", "max")
 
 
@@ -57,7 +57,7 @@ def _brightness(img, channel):
 
 
 def to_mono(img, size, black, white, contrast, channel="luminance"):
-    """Farbbild → deckendes Schwarz-Weiß-Bild (RGBA) in der Zielgröße."""
+    """Colour image → opaque black-and-white image (RGBA) at the target size."""
     if not 0 <= black < white <= 255:
         raise ValueError(f"Tonwerte: 0 ≤ schwarz < weiß ≤ 255, nicht {black}/{white}")
     if channel not in CHANNELS:
@@ -79,62 +79,62 @@ def scaled(value, factor):
 
 
 # --------------------------------------------------------------------------
-# Graustufen (2 Bit) für ArduboyG
+# Greyscale (2 bit) for ArduboyG
 # --------------------------------------------------------------------------
 #
-# Das Display bleibt schwarz-weiß; ArduboyG zeigt drei Bildebenen so schnell
-# nacheinander, dass ein Pixel je nach Zahl seiner hellen Ebenen schwarz,
-# dunkelgrau, hellgrau oder weiß wirkt (Stufe 0–3, Ebene p = Stufe > p).
+# The display stays black and white; ArduboyG shows three image planes in such
+# quick succession that a pixel looks black, dark grey, light grey or white
+# depending on the number of its lit planes (level 0–3, plane p = level > p).
 #
-# Auf dem OLED wirken Grautöne deutlich heller als ihre Zahlenwerte. Was in
-# einer Vorschau ausgewogen aussieht, ist auf dem Gerät flau; die Werte in
-# game.adv sind darum am Gerät ausgesucht. Bewährt haben sich:
+# On the OLED, grey shades look considerably brighter than their values. What
+# looks balanced in a preview is washed out on the device; the values in
+# game.adv are therefore chosen on the device. Proven in practice:
 #
-#   - flache Stufen statt Rasterung: Raster flimmern bei drei Ebenen sichtbar,
-#   - etwas Gamma (> 1), das die Mitten abdunkelt,
-#   - ein Motiv, das im Grau untergeht (das Geisterschiff in der Lava, das
-#     Logo vor dem Himmel), freistellen: eigene, hellere Tonkurve und ein
-#     schwarzer Rand von 1 px.
+#   - flat levels instead of dithering: dither patterns flicker visibly with three planes,
+#   - a little gamma (> 1), which darkens the midtones,
+#   - isolate a subject that gets lost in the grey (the ghost ship in the lava,
+#     the logo against the sky): its own, brighter tone curve and a
+#     black outline of 1 px.
 #
-# Beschreibung eines Bildes (aus einem greyscale-Block in game.adv):
-#   layers:   Liste von Schichten (dict), jede gilt ab ihrer Kante "from"
-#             (x im Original, 0 = ganzes Bild) bis zur nächsten,
-#   subjects: Liste von Motiven (dict) mit "mask" ("hue", Name) oder
-#             ("polygon", [(x, y), …]) im Original, dazu Tonoptionen,
-#             "min" (dunkelste Stufe) und "outline".
-# Tonoptionen: "channel" oder "weights" (r, g, b), "tone" (schwarz, weiß)
-# oder "auto", "contrast", "gamma", "max" (hellste Stufe), "dither".
+# Description of an image (from a greyscale block in game.adv):
+#   layers:   list of layers (dict), each applies from its edge "from"
+#             (x in the original, 0 = whole image) up to the next one,
+#   subjects: list of subjects (dict) with "mask" ("hue", name) or
+#             ("polygon", [(x, y), …]) in the original, plus tone options,
+#             "min" (darkest level) and "outline".
+# Tone options: "channel" or "weights" (r, g, b), "tone" (black, white)
+# or "auto", "contrast", "gamma", "max" (brightest level), "dither".
 
 GREY_LEVELS = 4
 GREY_PLANES = GREY_LEVELS - 1
-# Automatischer Tonbereich: Perzentile der Helligkeit im betroffenen Bereich
+# Automatic tone range: brightness percentiles within the affected area
 AUTO_TONE = (3, 99.5)
 
-# Farbmasken für Motive, auf dem Originalbild (Werte 0–255 je Kanal)
+# Colour masks for subjects, on the original image (values 0–255 per channel)
 _HUES = {
-    # Geisterschiff: blau vor roter Lava
+    # Ghost ship: blue against red lava
     "blue": lambda r, g, b: b > r + 15,
-    # Logo von Monkey Island: magenta vor blauem Himmel
+    # Monkey Island logo: magenta against blue sky
     "magenta": lambda r, g, b: (r > 90) & (b > 70) & (g < r * 0.6),
 }
 HUES = tuple(_HUES)
-# Anteil des Motivs an einem Zielpixel, ab dem es zum Motiv zählt
+# Share of the subject in a target pixel from which it counts as subject
 _HUE_COVER = 0.4
 _POLYGON_COVER = 0.5
 
 
 def _value(small, opts, default_channel):
-    """Helligkeit 0–255 je Pixel aus einem verkleinerten RGB-Bild."""
+    """Brightness 0–255 per pixel from a downscaled RGB image."""
     if "weights" in opts:
         return np.asarray(small, dtype=float) @ np.array(opts["weights"], dtype=float)
     return _brightness(small, opts.get("channel", default_channel))
 
 
 def _graded(small, opts, defaults, area):
-    """Tonkurve einer Schicht oder eines Motivs: Werte 0–1 je Pixel. area
-    (bool-Maske) ist der Bezug für tone auto: bei Schichten das ganze Bild
-    (alle Schichten gleich belichtet), bei Motiven das Motiv selbst (es soll
-    sich abheben)."""
+    """Tone curve of a layer or subject: values 0–1 per pixel. area
+    (bool mask) is the reference for tone auto: for layers the whole image
+    (all layers equally exposed), for subjects the subject itself (it should
+    stand out)."""
     channel = defaults["channel"]
     v = _value(small, opts, channel)
     contrast = opts.get("contrast", 0.0)
@@ -156,7 +156,7 @@ def _graded(small, opts, defaults, area):
 
 
 def _quantize(t, lo, hi, dither):
-    """Werte 0–1 → Stufen lo..hi; flach oder mit Atkinson-Rasterung."""
+    """Values 0–1 → levels lo..hi; flat or with Atkinson dithering."""
     if not dither:
         return lo + np.rint(t * (hi - lo)).astype(np.uint8)
     a = t * (hi - lo)
@@ -196,8 +196,8 @@ def _subject_mask(img, size, mask):
 
 
 def to_grey(img, size, layers, subjects=(), tone=(30, 95), channel="luminance"):
-    """Farbbild → Graustufen (np.uint8, Stufen 0–3) in der Zielgröße.
-    tone und channel sind die Vorgaben des Raums für Schichten ohne eigene."""
+    """Colour image → greyscale (np.uint8, levels 0–3) at the target size.
+    tone and channel are the room's defaults for layers without their own."""
     if not layers:
         raise ValueError("Graustufen brauchen mindestens eine Schicht (layer)")
     defaults = {"tone": tone, "channel": channel}
@@ -225,9 +225,9 @@ def to_grey(img, size, layers, subjects=(), tone=(30, 95), channel="luminance"):
 
 
 def card_grey(bright, threshold, gamma=1.0, dither=False):
-    """Kapitelkarte (Helligkeit des hellsten Kanals, schon zugeschnitten und
-    verkleinert) → Stufen 0–3. Die Karte ist Schrift: schwarz ab der halben
-    Schwelle, weiß bei der typischen Helligkeit der Schrift selbst."""
+    """Chapter card (brightness of the brightest channel, already cropped and
+    downscaled) → levels 0–3. The card is lettering: black from half the
+    threshold, white at the typical brightness of the lettering itself."""
     text = bright[bright > threshold]
     white = np.percentile(text, 60) if text.size else 255
     t = np.clip((bright - threshold / 2) / max(1.0, white - threshold / 2), 0, 1) ** gamma
@@ -235,8 +235,8 @@ def card_grey(bright, threshold, gamma=1.0, dither=False):
 
 
 def grey_planes(levels, opaque=None):
-    """Stufen → die drei Ebenen als Schwarz-Weiß-Bilder (RGBA); opaque
-    (bool-Maske) macht die übrigen Pixel durchsichtig (Figuren)."""
+    """Levels → the three planes as black-and-white images (RGBA); opaque
+    (bool mask) makes the remaining pixels transparent (characters)."""
     planes = []
     for p in range(GREY_PLANES):
         on = (levels > p).astype(np.uint8) * 255
@@ -248,39 +248,39 @@ def grey_planes(levels, opaque=None):
 
 
 def grey_preview(levels):
-    """Stufen → Graustufenbild zum Ansehen (0, 85, 170, 255)."""
+    """Levels → greyscale image for viewing (0, 85, 170, 255)."""
     return Image.fromarray((levels * (255 // GREY_PLANES)).astype(np.uint8), "L")
 
 
 def figure_levels(strip, fw):
-    """Streifen aus _figure_grey → je Frame (Stufen, deckend)."""
+    """Strip from _figure_grey → per frame (levels, opaque)."""
     a = np.asarray(strip)
     return [(a[:, x:x + fw, 0] // (255 // GREY_PLANES), a[:, x:x + fw, 3] > 0)
             for x in range(0, strip.width, fw)]
 
 
-# SCUMM-v4-Blickrichtungen (0 West, 1 Ost, 2 Süd, 3 Nord) → Engine
-# (0 rechts, 1 links, 2 frontal). Nach hinten gibt es keine Frames, also frontal.
+# SCUMM v4 facing directions (0 west, 1 east, 2 south, 3 north) → engine
+# (0 right, 1 left, 2 front). There are no frames facing away, so front.
 SCUMM_DIRS = {0: 1, 1: 0, 2: 2, 3: 2}
 
 
 # --------------------------------------------------------------------------
-# Figuren aus Original-Kostümen
+# Characters from original costumes
 # --------------------------------------------------------------------------
 #
-# Bei 1/2 Originalgröße bleiben von einer Figur etwa 10×26 Pixel. Jede Form
-# von Rasterung macht daraus einen Fleck. Lesbar bleibt eine helle Silhouette
-# in der Originalform, in der nur die dunkelsten Partien (Hose, Haare,
-# Mantel) schwarz sind, mit schwarzem Rand gegen die gerasterte Kulisse.
+# At 1/2 original size, about 10×26 pixels remain of a character. Any form
+# of dithering turns that into a blob. What stays legible is a bright silhouette
+# in the original shape, in which only the darkest parts (trousers, hair,
+# coat) are black, with a black outline against the dithered background.
 
-# Render-Leinwand für ein Kostüm: groß genug für alle Figuren des Spiels,
-# Fußpunkt unten mittig.
+# Render canvas for a costume: large enough for all characters in the game,
+# foot point at the bottom centre.
 _CANVAS = (240, 240)
 _ORIGIN = (120, 200)
 
 
 def _silhouette(img, dark, outline):
-    """Skaliertes RGBA → weiße Silhouette, sehr dunkle Pixel schwarz, Rand."""
+    """Scaled RGBA → white silhouette, very dark pixels black, outline."""
     a = np.asarray(img, dtype=float)
     alpha = a[..., 3] > 110
     lum = a[..., 0] * 0.35 + a[..., 1] * 0.5 + a[..., 2] * 0.15
@@ -290,7 +290,7 @@ def _silhouette(img, dark, outline):
     out[alpha & (lum < dark)] = (0, 0, 0, 255)
     opaque = alpha.copy()
     for step in range(outline):
-        # Rand wächst erst um die weißen Pixel, dann um alles Deckende.
+        # Outline grows first around the white pixels, then around everything opaque.
         src = (out[..., 0] == 255) & opaque if step == 0 else opaque
         grown = src.copy()
         grown[1:, :] |= src[:-1, :]
@@ -304,17 +304,17 @@ def _silhouette(img, dark, outline):
 
 
 def _figure_lum(a):
-    """Helligkeit der Figurenpixel (wie _silhouette)."""
+    """Brightness of the character pixels (as in _silhouette)."""
     return a[..., 0] * 0.35 + a[..., 1] * 0.5 + a[..., 2] * 0.15
 
 
 def _figure_grey(img, dark, outline, tone):
-    """Skaliertes RGBA → Figur in Graustufen (RGBA, Grau 0/85/170/255):
-    dieselbe Form und derselbe Rand wie _silhouette, aber statt einer weißen
-    Fläche die Helligkeiten des Kostüms. Sehr dunkle Pixel bleiben schwarz,
-    die übrigen verteilen sich über tone (schwarz, weiß) auf die Stufen 1–3 –
-    eine Figur bleibt so nie dunkler als Dunkelgrau und hebt sich mit dem
-    schwarzen Rand von jeder Kulisse ab."""
+    """Scaled RGBA → character in greyscale (RGBA, grey 0/85/170/255):
+    the same shape and outline as _silhouette, but the costume's brightness
+    values instead of a white area. Very dark pixels stay black, the rest
+    are spread over levels 1–3 via tone (black, white) – a character thus
+    never gets darker than dark grey and, with the black outline, stands
+    out against any background."""
     a = np.asarray(img, dtype=float)
     alpha = a[..., 3] > 110
     lum = _figure_lum(a)
@@ -339,21 +339,21 @@ def _figure_grey(img, dark, outline, tone):
     return Image.fromarray(out, "RGBA")
 
 
-# Tonbereich einer Figur in Graustufen: Perzentile der Helligkeit über alle
-# Frames eines Kostüms (ohne die schwarzen Partien) – gemeinsam, damit eine
-# Figur beim Laufen nicht die Helligkeit wechselt.
+# Tone range of a character in greyscale: brightness percentiles over all
+# frames of a costume (excluding the black parts) – shared, so that a
+# character does not change brightness while walking.
 FIGURE_TONE = (10, 95)
 
 
 def costume_frames(costume, palette, sequences, scale, dark=45, outline=1, grey=False):
-    """Rendert Kostüm-Frames und bringt sie auf eine gemeinsame Framegröße.
+    """Renders costume frames and brings them to a common frame size.
 
-    sequences: Liste von (Aktionen, Richtung, Schritte) – der Frame zeigt den
-    Zustand nach Anwenden der Aktionen und Schritte-mal Weiterschalten.
-    Rückgabe: (Streifen als RGBA, Framebreite, Framehöhe). Der Fußpunkt liegt
-    unten mittig im Frame, so wie die Engine Actors zeichnet. Mit grey=True
-    zusätzlich als vierter Wert derselbe Streifen in Graustufen
-    (_figure_grey: Grau 0/85/170/255, Alpha 0/255).
+    sequences: list of (actions, direction, steps) – the frame shows the
+    state after applying the actions and advancing steps times.
+    Returns: (strip as RGBA, frame width, frame height). The foot point lies
+    at the bottom centre of the frame, as the engine draws actors. With
+    grey=True, additionally the same strip in greyscale as a fourth value
+    (_figure_grey: grey 0/85/170/255, alpha 0/255).
     """
     raw = []
     for actions, direction, steps in sequences:
@@ -369,10 +369,10 @@ def costume_frames(costume, palette, sequences, scale, dark=45, outline=1, grey=
     ox, oy = _ORIGIN
     half = max(max(ox - b[0], b[2] - ox) for b in boxes)
     top = min(b[1] for b in boxes)
-    crop = (ox - half, top, ox + half, oy + 1)   # unten endet der Frame am Fuß
+    crop = (ox - half, top, ox + half, oy + 1)   # the frame ends at the foot at the bottom
     w = max(1, scaled(crop[2] - crop[0], scale))
     h = max(1, scaled(crop[3] - crop[1], scale))
-    fw, fh = w + 2 * outline, h + outline        # Rand links, rechts, oben
+    fw, fh = w + 2 * outline, h + outline        # outline left, right, top
     strip = Image.new("RGBA", (fw * len(raw), fh), (0, 0, 0, 0))
     padded_frames = []
     for i, im in enumerate(raw):
@@ -398,7 +398,7 @@ def costume_frames(costume, palette, sequences, scale, dark=45, outline=1, grey=
 
 
 def cycle_length(costume, actions, direction, limit=16):
-    """Anzahl der Schritte, bis sich eine Animation wiederholt."""
+    """Number of steps until an animation repeats."""
     state = costume.new_state()
     for action in actions:
         costume.apply(state, action, direction)

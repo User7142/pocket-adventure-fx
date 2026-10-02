@@ -1,6 +1,6 @@
-"""Tests für den Adventure-Compiler (tools/advc.py).
+"""Tests for the adventure compiler (tools/advc.py).
 
-Aufruf: make test
+Run: make test
 """
 import importlib.util
 import os
@@ -45,8 +45,8 @@ end
 start start
 """
 
-# Texte der Test-Sprachfassungen; '|' trennt Sprechblasen wie die
-# Warte-Codes des Originals.
+# Texts of the test language versions; '|' separates speech bubbles like
+# the original's wait codes.
 TEXTS = {
     "en": {"s22#5": "Walk to", "s22#9": "Use", "s22#26": "with", "o1.name": "stone",
            "r1.s200#1": "Hello", "r1.s200#2": "Here I am", "r1.s200#3": "Yes|No",
@@ -67,7 +67,7 @@ NAMES = {"en": "English", "de": "Deutsch"}
 
 
 class FakeSource(textsource.TextSource):
-    """TextSource ohne Originalkopie: Texte aus TEXTS."""
+    """TextSource without a copy of the game: texts from TEXTS."""
 
     def __init__(self, code, texts=None):
         self.code, self.name = code, NAMES[code]
@@ -84,7 +84,7 @@ class FakeSource(textsource.TextSource):
 
 
 def compile_source(source, extra_files=None, langs=("en",)):
-    """Kompiliert eine .adv-Quelle in einem Temp-Verzeichnis mit Standardbildern."""
+    """Compiles an .adv source in a temp directory with default images."""
     with tempfile.TemporaryDirectory() as tmp:
         base = Path(tmp)
         Image.new("RGBA", (128, 64), (0, 0, 0, 255)).save(base / "bg.png")
@@ -108,13 +108,13 @@ def read_record(data, name, offset):
 
 
 def header(data, lang=0):
-    """GameHeader der Sprache Nr. lang über das Sprachverzeichnis."""
+    """GameHeader of language no. lang via the language directory."""
     entry = read_record(data, "LangEntry", advc.record_size("LangDir") + lang * advc.record_size("LangEntry"))
     return read_record(data, "GameHeader", entry["header"])
 
 
 def bitmap(data, address, frame=0, masked=False):
-    """FX-Bild aus game.bin → Liste von Zeilen (Pixel 0/1) eines Frames."""
+    """FX image from game.bin → list of rows (pixels 0/1) of one frame."""
     w = int.from_bytes(data[address:address + 2], "big")
     h = int.from_bytes(data[address + 2:address + 4], "big")
     pages = (h + 7) // 8
@@ -128,7 +128,7 @@ def cstring(data, at):
 
 
 def says(data, script):
-    """Texte der SAY-Befehle am Anfang eines Skripts."""
+    """Texts of the SAY commands at the start of a script."""
     out = []
     while data[script] == advc.OP["SAY"]:
         out.append(cstring(data, int.from_bytes(data[script + 2:script + 5], "little")).decode("cp437"))
@@ -138,12 +138,12 @@ def says(data, script):
 
 class ImageEncodingTest(unittest.TestCase):
     def test_matches_fxdata_build(self):
-        """Unsere Bildkodierung muss byte-identisch zu fxdata-build.py sein."""
+        """Our image encoding must be byte-identical to fxdata-build.py."""
         import random
         rnd = random.Random(7)
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
-            # 3 Frames à 7x11 (Höhe kein Vielfaches von 8), mit Transparenz
+            # 3 frames of 7x11 (height not a multiple of 8), with transparency
             img = Image.new("RGBA", (21, 11))
             img.putdata([rnd.choice([(255, 255, 255, 255), (0, 0, 0, 255), (0, 0, 0, 0)])
                          for _ in range(21 * 11)])
@@ -188,7 +188,7 @@ class CompilerTest(unittest.TestCase):
         self.assertEqual(room["width"], 128)
         place = read_record(data, "PlaceRec", room["places"])
         self.assertEqual((place["x"], place["y"], place["w"], place["h"], place["face"]), (10, 50, 8, 8, 1))
-        # Startskript (Kurzform): ROOM 0 ohne Ankunftsposition, END
+        # Start script (short form): ROOM 0 without arrival position, END
         start = hdr["startScript"]
         self.assertEqual(data[start:start + 7], bytes([advc.OP["ROOM"], 0, 0xFF, 0xFF, 0, 0, advc.OP["END"]]))
         self.assertEqual(cstring(data, hdr["uiEmpty"]), b"(empty)")
@@ -221,11 +221,11 @@ class CompilerTest(unittest.TestCase):
         self.assertNotEqual(en["objects"], de["objects"])
         self.assertEqual((en["actors"], en["music"], en["title"]), (de["actors"], de["music"], de["title"]))
         script = read_record(data, "VerbEntry", read_record(data, "ObjectRec", de["objects"])["verbs"])["script"]
-        self.assertEqual(says(data, script), ["Schöne Grüße"])          # CP437-Umlaute
+        self.assertEqual(says(data, script), ["Schöne Grüße"])          # CP437 umlauts
         names = [cstring(data, read_record(data, "LangEntry", advc.record_size("LangDir") + i * 6)["name"])
                  for i in range(2)]
         self.assertEqual(names, [b"English", b"Deutsch"])
-        self.assertEqual(len(comp.images), 2)                         # Hintergrund, Figur: einmal
+        self.assertEqual(len(comp.images), 2)                         # background, character: once
 
     def test_quoted_text_is_rejected(self):
         bad = MINIMAL.replace("say hero r1.s200#1", 'say hero "Hallo"')
@@ -284,31 +284,31 @@ class CompilerTest(unittest.TestCase):
         self.assertIn("seen", comp.g.flags)
 
     def test_options_must_fit_the_display(self):
-        # Die Liste zeigt höchstens CHOICE_ROWS Optionen und scrollt; darüber
-        # steht der volle Text der gewählten, die Liste schrumpft dafür bis auf
-        # eine Zeile. Sieben Zeilen Text passen also, acht nicht.
+        # The list shows at most CHOICE_ROWS options and scrolls; above it
+        # sits the full text of the selected one, the list shrinks down to
+        # one line for it. So seven lines of text fit, eight do not.
         def choose(numbers):
             options = "".join(f"  option r1.s200#{n}\n    done\n" for n in numbers)
             return MINIMAL.replace("    say hero r1.s200#1\n", f"    choose\n{options}    end\n")
         compile_source(choose((1, 2, 4, 5, 6, 2)), langs=("en", "de"))
         with self.assertRaisesRegex(advc.CompileError, "passt das nicht auf das Display"):
             compile_source(choose((7, 1)), langs=("en", "de"))
-        # Gleichzeitig sichtbar: ohne Bedingungen alle; die Engine hält bis zu
-        # MAX_OPTIONS (und bekommt so viel Platz, wie das Spiel braucht).
+        # Visible at once: without conditions all of them; the engine holds up
+        # to MAX_OPTIONS (and gets as much room as the game needs).
         comp, _ = compile_source(choose((1,) * 5))
         self.assertIn("constexpr uint8_t MAX_OPTIONS = 5;", comp.header())
         with self.assertRaisesRegex(advc.CompileError, "bis zu 17 Optionen gleichzeitig"):
             compile_source(choose((1,) * 17))
 
     def test_visible_options_bound(self):
-        # Sich ausschließende Bedingungen zählen nur einmal.
+        # Mutually exclusive conditions count only once.
         opts = [{"cond": [("flag", "a", False)]}, {"cond": [("flag", "a", True)]},
                 {"cond": [("flag", "a", False), ("flag", "b", False)]}, {"cond": None}]
         self.assertEqual(advc.Compiler.visible_bound(opts), 3)
 
     def test_and_conditions_and_random(self):
-        # „and“ wird zu je einem Sprung pro Teilbedingung; random springt über
-        # eine Tabelle mit einem Ziel je Fall.
+        # "and" becomes one jump per sub-condition; random jumps via a
+        # table with one target per case.
         body = textwrap.dedent('''\
             if seen and not has stone
               set done
@@ -328,17 +328,17 @@ class CompilerTest(unittest.TestCase):
         self.assertEqual(data[script + 1], advc.COND_FLAG)
         self.assertEqual(data[script + 6], advc.OP["JUNLESS"])
         self.assertEqual(data[script + 7], advc.COND_HAS | advc.COND_NOT)
-        at = script + 12 + 2                      # nach den Sprüngen: SET done
+        at = script + 12 + 2                      # after the jumps: SET done
         self.assertEqual(data[at], advc.OP["RANDOM"])
         self.assertEqual(data[at + 1], 3)
 
     def test_string_variables(self):
-        # string … original <nr> + setstring/setchar; die Puffergröße folgt
-        # aus dem längsten gesetzten Text.
+        # string … original <nr> + setstring/setchar; the buffer size follows
+        # from the longest text assigned.
         body = "    setstring name r1.s200#2\n    setchar name 0 104\n"
         src = "string name original 30\n" + MINIMAL.replace("    say hero r1.s200#1\n", body)
         comp, _ = compile_source(src)
-        self.assertIn("constexpr uint8_t STRING_SIZE = 10;", comp.header())   # „Here I am“ + NUL
+        self.assertIn("constexpr uint8_t STRING_SIZE = 10;", comp.header())   # "Here I am" + NUL
         with self.assertRaisesRegex(advc.CompileError, "außerhalb des Strings"):
             compile_source(src.replace("setchar name 0", "setchar name 9"))
         with self.assertRaisesRegex(advc.CompileError, "wird nie gesetzt"):
@@ -353,7 +353,7 @@ class CompilerTest(unittest.TestCase):
 
 
 class GreyTest(unittest.TestCase):
-    """Graustufen-Umrechnung (original.to_grey) an künstlichen Bildern."""
+    """Greyscale conversion (original.to_grey) on synthetic images."""
 
     @staticmethod
     def flat_image(size, color):
@@ -385,24 +385,24 @@ class GreyTest(unittest.TestCase):
 
     def test_hue_subject_gets_own_tone_and_black_outline(self):
         img = self.flat_image((256, 128), (100, 0, 0))
-        img.paste((0, 0, 100), (96, 32, 160, 96))            # blaues Quadrat
+        img.paste((0, 0, 100), (96, 32, 160, 96))            # blue square
         layer = {"weights": (0.5, 0, 0.5), "tone": (0, 100)}
         subject = {"mask": ("hue", "blue"), "weights": (0, 0, 1), "tone": (0, 100), "min": 1, "outline": True}
         levels = orig.to_grey(img, (128, 64), [layer], [subject])
-        self.assertEqual(levels[32, 64], 3)                  # Motiv: eigene Tonkurve
-        self.assertEqual(levels[32, 47], 0)                  # Rand links vom Motiv
-        self.assertEqual(levels[32, 20], 2)                  # Hintergrund unverändert
+        self.assertEqual(levels[32, 64], 3)                  # subject: own tone curve
+        self.assertEqual(levels[32, 47], 0)                  # outline left of subject
+        self.assertEqual(levels[32, 20], 2)                  # background unchanged
         self.assertTrue((levels[16:48, 48:80] >= 1).all())
 
     def test_polygon_subject_with_min_on_dark_ground(self):
-        # dunkler Verlauf 0–40: ohne Freistellung überall schwarz
+        # dark gradient 0–40: without masking black everywhere
         dark = Image.linear_gradient("L").resize((256, 128)).point(lambda v: v * 40 // 255).convert("RGB")
         subject = {"mask": ("polygon", [(64, 32), (192, 32), (192, 96), (64, 96)]), "tone": "auto", "min": 1,
                    "outline": True}
         levels = orig.to_grey(dark, (128, 64), [{"tone": (0, 255)}], [subject])
-        self.assertTrue((levels[16:48, 32:96] >= 1).all())   # Motiv mindestens dunkelgrau
-        self.assertEqual(levels[16:48, 32:96].max(), 3)      # tone auto: Umfang des Motivs
-        self.assertTrue((levels[15, 32:96] == 0).all())      # Rand
+        self.assertTrue((levels[16:48, 32:96] >= 1).all())   # subject at least dark grey
+        self.assertEqual(levels[16:48, 32:96].max(), 3)      # tone auto: range of the subject
+        self.assertTrue((levels[15, 32:96] == 0).all())      # outline
         self.assertEqual(levels[0, 0], 0)
 
     def test_auto_tone_needs_some_range(self):
@@ -430,19 +430,19 @@ class GreyTest(unittest.TestCase):
 
 class WalkboxTest(unittest.TestCase):
     def test_touching_boxes_are_neighbours(self):
-        line = [(0, 10), (10, 10), (10, 10), (0, 10)]         # waagerechte Linie
-        square = [(10, 5), (20, 5), (20, 15), (10, 15)]      # berührt deren Ende
+        line = [(0, 10), (10, 10), (10, 10), (0, 10)]         # horizontal line
+        square = [(10, 5), (20, 5), (20, 15), (10, 15)]      # touches its end
         far = [(40, 0), (50, 0), (50, 5), (40, 5)]
         self.assertEqual(advc.box_distance(line, square), 0.0)
         self.assertGreater(advc.box_distance(square, far), advc.BOX_TOUCH)
 
     def test_overlapping_boxes_are_neighbours(self):
         a = [(0, 0), (10, 0), (10, 10), (0, 10)]
-        b = [(2, 2), (4, 2), (4, 4), (2, 4)]                 # liegt ganz in a
+        b = [(2, 2), (4, 2), (4, 4), (2, 4)]                 # lies entirely in a
         self.assertEqual(advc.box_distance(a, b), 0.0)
 
     def test_matrix_routes_through_chain(self):
-        # 0 – 1 – 2 in einer Kette, 3 isoliert
+        # 0 – 1 – 2 in a chain, 3 isolated
         quads = [[(0, 0), (10, 0), (10, 10), (0, 10)],
                  [(10, 0), (20, 0), (20, 10), (10, 10)],
                  [(20, 0), (30, 0), (30, 10), (20, 10)],
@@ -524,8 +524,8 @@ class WalkboxTest(unittest.TestCase):
 
 
 def original_dir():
-    """Verzeichnis der eigenen Originalkopie: MI_ORIGINAL, sonst die erste
-    Kopie aus ORIGINALS in config.mk (README) oder das ältere ORIGINAL."""
+    """Directory of your own copy of the game: MI_ORIGINAL, else the first
+    copy from ORIGINALS in config.mk (README) or the older ORIGINAL."""
     if os.environ.get("MI_ORIGINAL"):
         return Path(os.environ["MI_ORIGINAL"])
     config = ROOT / "config.mk"
@@ -553,7 +553,7 @@ class OriginalDataTest(unittest.TestCase):
         self.assertEqual({o.name for o in r.objects if o.width}, {"stairs", "path", "lookout"})
         img = r.image()
         self.assertEqual(img.size, (320, 144))
-        # Nachthimmel: dunkel und blau
+        # night sky: dark and blue
         red, green, blue = img.getpixel((40, 20))
         self.assertLess(red + green, blue * 2)
 
@@ -573,8 +573,8 @@ class OriginalDataTest(unittest.TestCase):
         strip, fw, fh = orig.costume_frames(
             costume, palette, [([sv.INIT, sv.STAND], sv.RIGHT, 0)], 0.55)
         self.assertEqual(strip.size, (fw, fh))
-        self.assertTrue(20 <= fh <= 32, fh)   # Guybrush ~48 px im Original
-        # Silhouette: nur Weiß, Schwarz und Transparent
+        self.assertTrue(20 <= fh <= 32, fh)   # Guybrush ~48 px in the original
+        # silhouette: only white, black and transparent
         colors = {px for px in strip.getdata()}
         self.assertTrue(colors <= {(255, 255, 255, 255), (0, 0, 0, 255), (0, 0, 0, 0)})
 
@@ -591,9 +591,9 @@ class OriginalDataTest(unittest.TestCase):
         data = comp.compile()
         self.assertGreater(len(data), 1000)
 
-        # Graustufen: jeder Raum aus dem Original, jedes Bild aus der Kulisse
-        # (Türen, Gegenstände) oder aus einem Kostüm, jede Figur, Titel und
-        # Kapitelkarte
+        # Greyscale: every room from the original, every image from the
+        # background (doors, items) or from a costume, every character, title
+        # and chapter card
         hdr = header(data)
         self.assertNotEqual(hdr["titleGrey"], advc.NONE24)
         size = advc.record_size("RoomRec")
@@ -611,8 +611,8 @@ class OriginalDataTest(unittest.TestCase):
             with self.subTest(actor=aid):
                 self.assertEqual(actor["grey"] != advc.NONE24, "grey" in game.actors[aid])
 
-        # backdrop: Zustand 0 einer Tür ist genau der Ausschnitt der Kulisse –
-        # sonst ließe die Engine (die ihn nicht zeichnet) etwas weg.
+        # backdrop: state 0 of a door is exactly the cutout of the background –
+        # otherwise the engine (which does not draw it) would leave something out.
         doors = 0
         for i, (rid, r) in enumerate(game.rooms.items()):
             room = read_record(data, "RoomRec", hdr["rooms"] + i * size)
@@ -622,7 +622,7 @@ class OriginalDataTest(unittest.TestCase):
                     continue
                 doors += 1
                 x, y = place["x"], place["y"]
-                for frame in range(4):   # 1 Bit, dann die drei Graustufen-Ebenen
+                for frame in range(4):   # 1 bit, then the three greyscale planes
                     bg = bitmap(data, room["background"] if frame == 0 else room["grey"], max(0, frame - 1))
                     img = bitmap(data, place["image"] if frame == 0 else place["grey"], max(0, frame - 1), masked=True)
                     cut = [row[x:x + len(img[0])] for row in bg[y:y + len(img)]]

@@ -1,53 +1,53 @@
-# Pocket Adventure FX – Spielbeschreibung (die ersten Szenen von „The Secret of Monkey Island“, Teil 1)
+# Pocket Adventure FX – scene description (the first scenes of “The Secret of Monkey Island”, Part 1)
 #
-# Sprache und Befehle: siehe README.md, Abschnitt „Skriptsprache“.
+# Language and commands: see README.md, section “Scene description”.
 #
-# Diese Datei enthält keine Texte, Grafiken oder Musik des Originals, nur
-# Verweise darauf. Beim Bauen kommen sie aus der eigenen Originalkopie
-# (VGA-Diskettenversion), die Texte aus jeder angegebenen Sprachfassung:
-#   r38.s203#1    erster Text in Skript 203 von Raum 38
-#   o498.name     Name von Objekt 498
-#   s22#10        Text in globalem Skript 22 (hier: die Verbnamen)
-# Liste aller Texte einer Kopie: tools/scumm_text.py <Kopie> [--filter r38.]
-# Mit :N nur die N-te Sprechblase eines Originaltexts (r38.s202#41:2).
+# This file contains no text, graphics or music of the original, only
+# references to them. At build time they come from your own copy of the game
+# (VGA floppy version), the texts from every language version given:
+#   r38.s203#1    first text in script 203 of room 38
+#   o498.name     name of object 498
+#   s22#10        text in global script 22 (here: the verb names)
+# List of all texts of a copy: tools/scumm_text.py <copy> [--filter r38.]
+# With :N only the N-th speech bubble of an original text (r38.s202#41:2).
 #
-# Abläufe und Zeilen folgen den Originalskripten (Bezug jeweils im
-# Kommentar), gekürzt auf das, was auf 128×64 Pixeln und 2,5 KB RAM geht.
-# Koordinaten: Raumpixel nach der Verkleinerung auf 64 px Höhe
-# (Original × 64/144), y = Fußlinie der Figuren.
+# Routines and lines follow the original scripts (source given in the
+# comment), cut down to what fits into 128×64 pixels and 2.5 KB of RAM.
+# Coordinates: room pixels after scaling down to 64 px height
+# (original × 64/144), y = baseline of the characters' feet.
 
-# Titel: Mêlée Island bei Nacht (Raum 10) mit dem Logo (Objekt 113)
+# Title: Mêlée Island by night (room 10) with the logo (object 113)
 title original 10 overlay 113 48 24 crop 40 16 280 144 tone 40 120 contrast 0.6 music theme
 cursor "art/ui/cursor.png"
 inventoryverb look
 
-# --- Musik -----------------------------------------------------------------
-# Melodiestimme der AdLib-Fassungen. Sound 110 ist das Titelthema (das
-# Startskript s1 wählt es für AdLib-Rechner); sein Anfang ist ein 20 s langer
-# Klangteppich, die Melodie setzt nach rund 25 s ein. Sound 108 spielt der
-# Ausguck beim ersten Besuch, Sound 101 läuft in der SCUMM Bar; das Dock ist
-# still (alles wie in den Originalskripten).
+# --- Music -----------------------------------------------------------------
+# Melody voice of the AdLib versions. Sound 110 is the title theme (the
+# boot script s1 picks it for AdLib machines); it opens with a 20 s
+# soundscape, the melody comes in after about 25 s. Sound 108 is played at the
+# lookout on the first visit, sound 101 runs in the SCUMM Bar; the dock is
+# silent (all as in the original scripts).
 music theme original 110 channel 0 start 25200
 music lookout_music original 108
 music bar_music original 101
-# Kapitelkarte „Teil 1“: Raum 96 spielt Var[81] (AdLib: Sound 104) bis zum Ende
-# Die Melodie setzt erst nach 2,2 s ein; bis dahin spielt der Lautsprecher die
-# Einleitungsfigur der Begleitung (Kanal 1), sonst wäre es so lange still.
+# Chapter card “Part 1”: room 96 plays Var[81] (AdLib: sound 104) to the end
+# The melody only starts after 2.2 s; until then the speaker plays the
+# intro figure of the accompaniment (channel 1), otherwise it would be silent.
 music part1_music original 104 lead 1
-# Geisterschiff (s117, Var[76] = Sound 100): Die Melodie ist Kanal 3; die
-# automatische Wahl träfe Kanal 0, eine Akkordstimme, die einstimmig zerfällt.
+# Ghost ship (s117, Var[76] = sound 100): the melody is channel 3; the
+# automatic choice would pick channel 0, a chord voice that falls apart in mono.
 music ghost_music original 100 channel 3
-# Karte von Mêlée (r85.en startet Var[89], AdLib: Sound 112; r85.ex stoppt sie)
+# Map of Mêlée (r85.en starts Var[89], AdLib: sound 112; r85.ex stops it)
 music map_music original 112 channel 1
 
-# --- Kapitelkarte ------------------------------------------------------------
-# Raum 96: Vollbild mit eingezeichnetem Text, je Sprachfassung eigenes Bild.
-# Die Treppe am Ausguck lädt ihn beim ersten Abstieg (o494, Bit 395), danach
-# geht es zum Dock.
+# --- Chapter card ------------------------------------------------------------
+# Room 96: full screen with the text drawn in, one image per language version.
+# The stairs at the lookout load it on the first descent (o494, bit 395), then
+# it goes on to the dock.
 card part1 original 96 music part1_music
 
-# --- Verben (Reihenfolge = Menü; das erste muss walk sein) -------------------
-# Namen aus dem Verbskript s22 des Originals.
+# --- Verbs (order = menu; the first one must be walk) -----------------------
+# Names from the original's verb script s22.
 verb walk   s22#5
 verb open   s22#1
 verb close  s22#2
@@ -59,8 +59,8 @@ verb push   s22#3
 verb pull   s22#4
 verb use    s22#9 prep s22#26
 
-# Standardantworten aus s3, dem Skript des Originals für Sätze ohne eigene
-# Antwort des Objekts.
+# Default responses from s3, the original's script for sentences without a
+# response of their own from the object.
 default look
   say guybrush s3#4
 end
@@ -89,36 +89,36 @@ default give
   say guybrush s3#7
 end
 
-# --- Figuren ---------------------------------------------------------------
-# Der erste Actor ist die Spielfigur. Kostüme aus dem Original: 1 = Guybrush,
-# 33 = der Ausguck, 26 = der Koch. Etwas größer als die Kulisse (0,55 statt
-# 0,44), damit die Figuren auf 1 Bit lesbar bleiben.
-# depth: kleiner, je weiter hinten er steht (Skalierung der Laufflächen, etwa
-# in der Stadtstraße und am Dock); die anderen Figuren ignorieren im Original
-# die Laufflächen (Klasse 22) und bleiben gleich groß.
+# --- Characters ------------------------------------------------------------
+# The first actor is the player character. Original costumes: 1 = Guybrush,
+# 33 = the lookout, 26 = the cook. Slightly larger than the background (0.55
+# instead of 0.44), so the characters stay readable at 1 bit.
+# depth: smaller the further back he stands (walk box scaling, e.g.
+# in the town street and on the dock); in the original the other characters
+# ignore the walk boxes (class 22) and keep the same size.
 actor guybrush costume 1 scale 0.55 depth
-# Auf der Karte von Mêlée trägt Guybrush die kleine Kartenfigur (r85.en: costume 3)
+# On the map of Mêlée Guybrush wears the small map figure (r85.en: costume 3)
 actor guybrush_map costume 3 scale 1.2
-actor lookout  costume 33 scale 0.55 dark 75   # grauer Mantel: höhere Schwelle
+actor lookout  costume 33 scale 0.55 dark 75   # grey coat: higher threshold
 actor cook     costume 26 scale 0.55 object cook_obj
-# Die drei wichtig aussehenden Piraten: ein Actor mit Kostüm 24 (r28.s204)
+# The three important-looking pirates: one actor with costume 24 (r28.s204)
 actor leaders  costume 24 scale 0.55
-# Geisterschiff (s117): LeChuck = Kostüm 32, der Geisterpirat = Kostüm 54
-actor lechuck  costume 32 scale 0.55 dark 15   # dunkelblau: sonst ganz schwarz
-# Voodoo-Lady (r29.s201): Kostüm 15
+# Ghost ship (s117): LeChuck = costume 32, the ghost pirate = costume 54
+actor lechuck  costume 32 scale 0.55 dark 15   # dark blue: otherwise all black
+# Voodoo Lady (r29.s201): costume 15
 actor voodoo   costume 15 scale 0.55
-# Stadtstraße (r35.en, s200): die drei Piraten an der Ecke mit Papagei
-# (Kostüm 41, ein Actor), ihre Ratte (42) und der Kartenverkäufer (14)
+# Town street (r35.en, s200): the three pirates on the corner with a parrot
+# (costume 41, one actor), their rat (42) and the map seller (14)
 actor men      costume 41 scale 0.55
 actor rat      costume 42 scale 0.55
 actor citizen  costume 14 scale 0.55
 actor ghost    costume 54 scale 0.55
 
-# --- Start: Ankunft beim Ausguck (r38.s203) ---------------------------------
-# Guybrush kommt den Pfad herauf, stellt sich vor, verabschiedet sich, fragt
-# noch einmal nach der SCUMM Bar und geht über die Treppe hinunter zum Dock.
+# --- Start: arrival at the lookout (r38.s203) -------------------------------
+# Guybrush comes up the path, introduces himself, says goodbye, asks
+# once more about the SCUMM Bar and goes down the stairs to the dock.
 start
-  # Anfangszustand: das zweite Huhn-Objekt (o391#2) erscheint erst, wenn er das Huhn ansieht
+  # Initial state: the second chicken object (o391#2) only appears once he looks at the chicken
   hide rubber_chicken
   room lookout at 141 31 face left
   walk guybrush 62 47
@@ -142,17 +142,17 @@ start
   walk guybrush 30 57
 end
 
-# --- Ausguck ---------------------------------------------------------------
-# r38.s141: Der Ausguck merkt sich den Namen falsch. Aus dem Nachnamen (s141#1) wird
-# zufällig etwas anderes; '@' (64) füllt auf und wird nicht gezeigt.
+# --- Lookout ---------------------------------------------------------------
+# r38.s141: The lookout gets the name wrong. The surname (s141#1) is
+# randomly turned into something else; '@' (64) pads and is not shown.
 string lookout_name original 30
 
-# r38.s202: das spätere Gespräch mit dem Ausguck. Erst etwas Smalltalk, dann
-# erschrickt er; danach geht es um Guybrushs Namen, bis er fragt, wer der
-# Ausguck ist – ab da gilt das zweite Menü. Hat Guybrush ihn nach dem
-# Gouverneur und nach seiner Blindheit gefragt, ist der Ausguck künftig
-# beschäftigt. Merker, die im Original nur für ein Gespräch gelten
-# (lk_over, lk_quiet, lk_offer), setzt das Gespräch zu Beginn zurück.
+# r38.s202: the later conversation with the lookout. First some small talk,
+# then he is startled; after that it is about Guybrush's name until he asks
+# who the lookout is – from then on the second menu applies. Once Guybrush
+# has asked him about the governor and about his blindness, the lookout is
+# busy from then on. Flags that in the original only last one conversation
+# (lk_over, lk_quiet, lk_offer) are reset at the start of the conversation.
 object old_man o498.name
   on look
     say guybrush o498#1
@@ -362,13 +362,13 @@ end
 
 object stairs o494.name
   on walk
-    # o494: unten am Dock (346,133 im Original)
+    # o494: down at the dock (346,133 in the original)
     room dock at 4 34 face right
     walk guybrush 154 59
   end
 end
 
-# o496: der Pfad hinunter zur Karte der Insel (Raum 85)
+# o496: the path down to the map of the island (room 85)
 object path o496.name
   on walk
     costume guybrush guybrush_map
@@ -390,8 +390,8 @@ object poster o438.name
   end
 end
 
-# Türen muss man wie im Original erst öffnen. Jede Tür ist ein Objektpaar,
-# eins je Raum (o437/o322, o323/o894); Zustand 1 = offen.
+# As in the original, doors have to be opened first. Each door is a pair of
+# objects, one per room (o437/o322, o323/o894); state 1 = open.
 object bar_entrance o437.name
   on open
     state bar_entrance 1
@@ -410,7 +410,7 @@ end
 
 object archway o436.name
   on walk
-    # Torbogen zur Stadt (o436): Raum 35 am rechten Torbogen
+    # Archway to the town (o436): room 35 at the right archway
     room street at 194 48 face left
     walk guybrush 184 58
   end
@@ -429,7 +429,7 @@ object bar_door o322.name
   on walk
     if bar_door open
       if not seen_ghostship
-        # Beim ersten Verlassen der Bar (o322, Bit 446): s117
+        # On first leaving the bar (o322, bit 446): s117
         set seen_ghostship
         room meanwhile
         wait 60
@@ -477,16 +477,16 @@ object bar_door o322.name
   end
 end
 
-# Der Koch (r28.s211–s216): Er wartet in der Küche 30 bis 50 Sekunden (s211),
-# kommt heraus, bringt einem Piraten Grog und geht zurück (s216). Im Original
-# wählt er den Piraten zufällig; hier wechselt er zwischen einem am linken
-# Rand und einem bei den wichtig aussehenden Piraten. Wird der Ablauf neu
-# gestartet, während er draußen ist, geht er wie bei s216 von dort aus weiter.
+# The cook (r28.s211–s216): he waits in the kitchen for 30 to 50 seconds (s211),
+# comes out, brings a pirate grog and goes back (s216). In the original
+# he picks the pirate at random; here he alternates between one at the left
+# edge and one with the important-looking pirates. If the background routine
+# is restarted while he is outside, he carries on from there as in s216.
 routine cook
   repeat
     if not cook_out
       if cook_called
-        # r28.s212: nach dem Ruf an der Tür kommt er nach zehn Sekunden
+        # r28.s212: after the call at the door he comes out after ten seconds
         wait 600
         clear cook_called
       else
@@ -516,16 +516,16 @@ routine cook
   end
 end
 
-# Klick auf die Küchentür (r28.s203, s214, s215). Das Original sieht schon
-# beim Klick nach dem Koch, deshalb ist die Tür „direct“ platziert und die
-# Handler lassen Guybrush selbst hinlaufen:
-# - Ist der Koch draußen und weit weg (x ≤ 310 im Original), bleibt er
-#   stehen, und die Tür funktioniert normal.
-# - Ist er draußen und näher, warnt er Guybrush (s215)
-#   und serviert dann weiter (x > 520) oder geht zurück in die Küche.
-# - Ist er in der Küche und wartet (s211), öffnet er beim Öffnen die Tür,
-#   ruft von drinnen und schließt sie wieder (s214); zehn Sekunden später
-#   kommt er heraus (s212). In diesen zehn Sekunden geht die Tür auf.
+# Click on the kitchen door (r28.s203, s214, s215). The original already checks
+# on the click where the cook is, so the door is placed “direct” and the
+# handlers let Guybrush walk there himself:
+# - If the cook is outside and far away (x ≤ 310 in the original), he stays
+#   put and the door works normally.
+# - If he is outside and closer, he warns Guybrush (s215)
+#   and then keeps serving (x > 520) or goes back into the kitchen.
+# - If he is in the kitchen waiting (s211), he opens the door when it is opened,
+#   calls from inside and closes it again (s214); ten seconds later
+#   he comes out (s212). During these ten seconds the door opens.
 object kitchen_door o323.name
   on open
     if cook_out
@@ -615,7 +615,7 @@ object kitchen_door o323.name
   end
 end
 
-# Der Koch selbst hat keine eigenen Verben (r28: Actor 6 ohne Objekt).
+# The cook himself has no verbs of his own (r28: actor 6 without an object).
 object cook_obj r28.en#1
 end
 
@@ -640,12 +640,12 @@ object mug o373.name
   end
 end
 
-# r28.s220: das Gespräch mit den wichtig aussehenden Piraten. Beim ersten
-# Mal fragen sie, was er will; nach der Antwort #14 erklären sie die
-# drei Prüfungen und es geht gleich mit den Fragen weiter. Danach beginnt
-# jedes Gespräch mit dem Gruß und den Fragen. Die Chöre (#26–28,
-# #40–42, #64–66 usw.) stehen im Original dreistimmig
-# versetzt auf dem Bild; hier erscheint jeweils die letzte Stimme.
+# r28.s220: the conversation with the important-looking pirates. The first
+# time they ask what he wants; after answer #14 they explain the
+# three trials and it goes straight on to the questions. After that every
+# conversation starts with the greeting and the questions. The choruses (#26–28,
+# #40–42, #64–66 etc.) are shown in the original as three voices
+# offset on screen; here only the last voice appears each time.
 object leaders_obj o332.name
   on talk
     if told_pirate
@@ -806,7 +806,7 @@ object pirate_d o347.name
   end
 end
 
-# Der Hund bellt (r28.s222); gibt man ihm etwas, knurrt er (o350).
+# The dog barks (r28.s222); if you give it something, it growls (o350).
 object dog o350.name
   on look
     say narrator r28.s222#1
@@ -820,7 +820,7 @@ object dog o350.name
   end
 end
 
-# --- Küche ---------------------------------------------------------------------
+# --- Kitchen ---------------------------------------------------------------------
 object kitchen_exit o894.name
   on open
     state kitchen_exit 1
@@ -885,15 +885,15 @@ object barrel o380.name
   end
 end
 
-# --- Stadtstraße (Raum 35) -----------------------------------------------------
+# --- Town street (room 35) -----------------------------------------------------
 object street_archway o458.name
   on walk
-    # o458: zurück zum Dock (das Ende von Teil 1 führt hier woandershin)
+    # o458: back to the dock (the end of Part 1 leads elsewhere from here)
     room dock at 441 51 face left
   end
 end
 
-# o459: Torbogen zur Hauptstraße (Raum 34) – nicht in dieser Fassung
+# o459: archway to the main street (room 34) – not in this version
 object high_street o459.name
   on walk
     say narrator ui.not_included
@@ -906,9 +906,9 @@ object sign o451.name
   end
 end
 
-# r35.s210: Die Uhr zeigt immer zehn Uhr. Der Kommentar ändert sich, wenn
-# Guybrush die Straße verlassen hat und wiederkommt (Var[247], gezählt beim
-# Verlassen, sofern er hingesehen hat).
+# r35.s210: The clock always shows ten o'clock. The comment changes when
+# Guybrush has left the street and comes back (Var[247], counted on
+# leaving, provided he has looked at it).
 object clock o457.name
   on look
     if clock_visits = 0
@@ -933,7 +933,7 @@ object clock o457.name
   end
 end
 
-# Tür zum Laden der Voodoo-Lady (o452/o381, ein Türpaar)
+# Door to the Voodoo Lady's shop (o452/o381, a door pair)
 object shop_door o452.name
   on open
     state shop_door 1
@@ -953,10 +953,10 @@ object shop_door o452.name
   end
 end
 
-# r35.s206/s207: Hinter den vier Haustüren (o453–o456) verschwindet Guybrush
-# und kommt aus einer anderen wieder heraus. Welche Tür wohin führt, würfelt
-# s206 beim ersten Mal aus; die Gewichte unten sind die Wahrscheinlichkeiten
-# seines Verfahrens (in 36steln).
+# r35.s206/s207: Guybrush disappears behind the four house doors (o453–o456)
+# and comes out of another one. Which door leads where is rolled by
+# s206 the first time; the weights below are the probabilities of
+# its method (in 36ths).
 sub door_mapping
   random
   case 2
@@ -1186,12 +1186,12 @@ object house_door_d o456.name
   end
 end
 
-# --- Leute in der Stadtstraße ------------------------------------------------
-# Geld (o497): das Original führt den Betrag in Var[194]; Name und Text
-# setzen ihn ein (o497#4).
+# --- People in the town street ------------------------------------------------
+# Money (o497): the original keeps the amount in Var[194]; name and text
+# insert it (o497#4).
 number money original 194
-# Der Papagei der Piraten krächzt (r35.s217#1) mit zwei zufälligen Buchstaben
-# (r35.s217, String 26).
+# The pirates' parrot squawks (r35.s217#1) with two random letters
+# (r35.s217, string 26).
 string squawk original 26
 
 object money_obj o497#4
@@ -1219,8 +1219,8 @@ sub squawk
   say men r35.s217#2
 end
 
-# r35.s214/s215: Kommt Guybrush der Ratte nahe und zeigt auf sie, warnen
-# die Piraten; beim fünften Mal läuft die Ratte davon (Var[234] = 5).
+# r35.s214/s215: If Guybrush gets close to the rat and points at it, the
+# pirates warn him; the fifth time the rat runs away (Var[234] = 5).
 routine rat_watch
   repeat
     wait 1
@@ -1258,8 +1258,8 @@ cutscene rat_warning
   end
 end
 
-# r35.s201: Der Papagei des Kartenverkäufers krächzt alle 13 bis 17 Sekunden,
-# solange die Kamera links ist.
+# r35.s201: The map seller's parrot squawks every 13 to 17 seconds
+# while the camera is on the left.
 routine braak_watch
   repeat
     wait random 800 1000
@@ -1276,9 +1276,9 @@ end
 object rat_obj o461.name
 end
 
-# r35.s216: das Gespräch mit den Piraten. Teile, die das Original von
-# mehreren Stellen anspringt, sind Unterprogramme; men_bye beendet das
-# Gespräch aus ihnen heraus.
+# r35.s216: the conversation with the pirates. Parts that the original jumps
+# to from several places are subroutines; men_bye ends the
+# conversation from within them.
 object men_obj o460.name
   on look
     say men o460#1
@@ -1362,7 +1362,7 @@ object men_obj o460.name
   end
 end
 
-# 0C59: die Geschichte von den Ratten, die ein Schiff segelten – oder Affen
+# 0C59: the story of the rats that sailed a ship – or monkeys
 sub rat_story
   set m_rats
   say men r35.s216#41
@@ -1399,7 +1399,7 @@ sub rat_story
   end
 end
 
-# 0964: die Frage nach Ratten (#29)
+# 0964: the question about rats (#29)
 sub rat_question
   say men r35.s216#29
   choose
@@ -1425,7 +1425,7 @@ sub rat_question
   end
 end
 
-# 0B62: Er hat die Ratte beleidigt. Ist sie noch da, antwortet sie selbst.
+# 0B62: He has insulted the rat. If it is still there, it answers itself.
 sub rat_insult
   set m_insulted
   if rat_count < 5
@@ -1443,7 +1443,7 @@ sub rat_insult
   set men_bye
 end
 
-# 056B: die angebotenen Karten sind in Wahrheit ein Sitzungsprotokoll (o472)
+# 056B: the maps on offer are really the minutes of a meeting (o472)
 sub minutes_offer
   set m_map
   say men r35.s216#18
@@ -1470,7 +1470,7 @@ sub minutes_offer
   end
 end
 
-# 092D: Er nimmt das Protokoll und bekommt zwei Achterstücke dafür.
+# 092D: He takes the minutes and gets two pieces of eight for them.
 sub minutes_deal
   say men r35.s216#28
   pickup minutes
@@ -1480,7 +1480,7 @@ sub minutes_deal
   end
 end
 
-# 11E0: das Menü nach #61
+# 11E0: the menu after #61
 sub keg_menu
   say men r35.s216#61
   choose
@@ -1525,10 +1525,10 @@ sub keg_menu
   end
 end
 
-# r35.s218: der Kartenverkäufer. Beim ersten Mal fragt er nach Cousin Sven
-# (ein Code); dann bietet er die Karte zum Schatz für 100 Achterstücke an.
-# Die Kaufoption (#33) erscheint erst ab 100 Achterstücken – in diesem Ausschnitt
-# gibt es höchstens zwei, die Option fehlt deshalb.
+# r35.s218: the map seller. The first time he asks about cousin Sven
+# (a code); then he offers the map to the treasure for 100 pieces of eight.
+# The buy option (#33) only appears from 100 pieces of eight – in this excerpt
+# there are at most two, so the option is missing.
 object citizen_obj o448.name
   on look
     say citizen o448#1
@@ -1619,10 +1619,10 @@ object citizen_obj o448.name
   end
 end
 
-# --- Karte von Mêlée (Raum 85) ------------------------------------------------
-# Frei begehbar; betreten lassen sich hier nur das Dorf (zum Dock, o872) und
-# der Ausguck (o868). Auf dem Weg hinaus bekommt Guybrush seine eigene Figur
-# zurück (r85.ex).
+# --- Map of Mêlée (room 85) ------------------------------------------------
+# Free to walk around; the only places to enter are the village (to the dock,
+# o872) and the lookout (o868). On the way out Guybrush gets his own figure
+# back (r85.ex).
 object map_village o872.name
   on walk
     music stop
@@ -1677,7 +1677,7 @@ object map_house o871.name
   end
 end
 
-# --- Laden der Voodoo-Lady (Raum 29) ---------------------------------------
+# --- Voodoo Lady's shop (room 29) ---------------------------------------
 object voodoo_door o381.name
   on open
     state voodoo_door 1
@@ -1689,7 +1689,7 @@ object voodoo_door o381.name
   end
   on walk
     if voodoo_door open
-      # Raum 35: die Tür fällt nach einer Sekunde hinter ihm zu
+      # Room 35: the door slams shut behind him after one second
       room street at 106 39 face front
       wait 60
       state shop_door 0
@@ -1719,8 +1719,8 @@ object chickens_hanging o383.name
   end
 end
 
-# o391: Beim Ansehen bekommt das Huhn einen neuen Namen (setObjectName, o391#2);
-# hier sind das zwei Objekte am selben Platz, im Raum wie im Inventar.
+# o391: When looked at, the chicken gets a new name (setObjectName, o391#2);
+# here these are two objects in the same place, in the room and in the inventory.
 object chicken o391.name
   on look
     say guybrush o391#1
@@ -1853,9 +1853,9 @@ end
 object love_beads o394.name
 end
 
-# r29.s210: die Voodoo-Lady. Sie errät seinen Namen, schenkt ihm das Huhn
-# und sieht in die Zukunft; danach verschwindet sie in einem Blitz. Kommt
-# Guybrush wieder, ist niemand da (Var[293] = 1).
+# r29.s210: the Voodoo Lady. She guesses his name, gives him the chicken
+# and looks into the future; then she vanishes in a flash. If
+# Guybrush comes back, nobody is there (Var[293] = 1).
 object fortune_teller o396.name
   on talk
     if vl_gone
@@ -2003,16 +2003,16 @@ object fortune_teller o396.name
   end
 end
 
-# --- Räume -----------------------------------------------------------------
-# Raum 38 des Originals, 320x144 → 142x64
+# --- Rooms -----------------------------------------------------------------
+# Room 38 of the original, 320x144 → 142x64
 room lookout original 38 tone 35 105 contrast 0.8
   walkboxes original
 
-  # Reihenfolge = Zeichen- und Klickreihenfolge: spätere liegen oben.
+  # Order = drawing and click order: later ones are on top.
   place stairs original 494
   place path original 496
   place old_man original 498 face left
-  # Lagerfeuer = Originalkostüm 48, nur als Bild
+  # Campfire = original costume 48, as an image only
   place decor at 64 43 costume 48 states 0.44 speed 6
 
   entry
@@ -2025,7 +2025,7 @@ room lookout original 38 tone 35 105 contrast 0.8
   end
 end
 
-# Raum 33 des Originals: das Dock, 1008x144 → 448x64
+# Room 33 of the original: the dock, 1008x144 → 448x64
 room dock original 33 tone 35 105 contrast 0.8
   walkboxes original
   entry
@@ -2037,8 +2037,8 @@ room dock original 33 tone 35 105 contrast 0.8
   place archway original 436 face right
 end
 
-# Raum 28 des Originals: die SCUMM Bar, 640x144 → 284x64. Die Piraten sind
-# Objektbilder (je die erste Animationsphase).
+# Room 28 of the original: the SCUMM Bar, 640x144 → 284x64. The pirates are
+# object images (the first animation frame each).
 room scummbar original 28 tone 55 95 contrast 0 overlay 374 375 376 377 335 341 353 350 356 344 359 362 347 365 368 370
   walkboxes original
   place fireplace original 329 face right
@@ -2055,10 +2055,10 @@ room scummbar original 28 tone 55 95 contrast 0 overlay 374 375 376 377 335 341 
 
   entry
     music bar_music
-    # r28.s204: am Tisch bei 440,132, Blick nach vorn
+    # r28.s204: at the table at 440,132, facing forward
     put leaders 196 59
     face leaders front
-    # r28.en/s205: Der Koch ist in der Küche, sein Ablauf beginnt von vorn.
+    # r28.en/s205: The cook is in the kitchen, his background routine starts over.
     remove cook
     clear cook_out
     clear cook_called
@@ -2066,10 +2066,10 @@ room scummbar original 28 tone 55 95 contrast 0 overlay 374 375 376 377 335 341 
   end
 end
 
-# s117: eine Zwischenzeile (#1) auf Schwarz, dann das Geisterschiff im Lavafluss
-# (Raum 70) und LeChucks Kajüte (Raum 72), je 320×144 → 142×64. Beide sind
-# fast nur blau und rot; der Blaukanal zeigt das Schiff als helle Silhouette
-# vor der Lava und die Kajüte mit ihren Kanten.
+# s117: an interstitial line (#1) on black, then the ghost ship on the lava
+# river (room 70) and LeChuck's cabin (room 72), each 320×144 → 142×64. Both
+# are almost only blue and red; the blue channel shows the ship as a bright
+# silhouette against the lava and the cabin with its edges.
 room meanwhile blank
 end
 
@@ -2081,7 +2081,7 @@ room ghostcabin original 72 tone 45 170 contrast 0.6 channel blue
   walkboxes original
 end
 
-# Raum 35 des Originals: die Stadtstraße, 480×144 → 213×64
+# Room 35 of the original: the town street, 480×144 → 213×64
 room street original 35 tone 80 220 contrast 0.4 channel max
   walkboxes original
   place street_archway original 458 face right
@@ -2097,13 +2097,13 @@ room street original 35 tone 80 220 contrast 0.4 channel max
   place rat_obj original 461
   place citizen_obj original 448
   entry
-    # r35.ex: Var[247] zählt das Verlassen, wenn er auf die Uhr gesehen hat
+    # r35.ex: Var[247] counts leaving if he has looked at the clock
     if clock_looked
       clear clock_looked
       add clock_visits 1
     end
-    # r35.en/s200: die Piraten links, ihre Ratte (solange sie nicht davongelaufen
-    # ist), rechts der Kartenverkäufer
+    # r35.en/s200: the pirates on the left, their rat (as long as it has not
+    # run away), the map seller on the right
     put men 22 55
     face men front
     put citizen 144 52
@@ -2117,7 +2117,7 @@ room street original 35 tone 80 220 contrast 0.4 channel max
   end
 end
 
-# Raum 29 des Originals: der Laden der Voodoo-Lady, 496×144 → 220×64
+# Room 29 of the original: the Voodoo Lady's shop, 496×144 → 220×64
 room voodoo original 29 tone 15 90 contrast 0.8 channel max
   walkboxes original
   place voodoo_door original 381 door face left
@@ -2145,8 +2145,8 @@ room voodoo original 29 tone 15 90 contrast 0.8 channel max
   end
 end
 
-# Raum 85 des Originals: die Karte, 320×200 → 205×128; die Kamera scrollt in
-# beide Richtungen, damit Wege und Ziele erkennbar bleiben.
+# Room 85 of the original: the map, 320×200 → 205×128; the camera scrolls in
+# both directions so that paths and destinations stay recognisable.
 room map original 85 height 128 tone 25 60 contrast 2.0
   walkboxes original
   place map_village original 872
@@ -2163,7 +2163,7 @@ room map original 85 height 128 tone 25 60 contrast 2.0
   end
 end
 
-# Raum 41 des Originals: die Küche mit dem Steg, 320x144 → 142x64
+# Room 41 of the original: the kitchen with the pier, 320x144 → 142x64
 room kitchen original 41 tone 85 165 contrast 0 overlay 898 902
   walkboxes original
   place kitchen_exit original 894 door face left
@@ -2174,21 +2174,21 @@ room kitchen original 41 tone 85 165 contrast 0 overlay 898 902
   place fish original 378 picture face front
 end
 
-# --- Graustufen (2 Bit) --------------------------------------------------------
-# Je Bild eine Graustufen-Fassung (tools/original.py: to_grey); im Spiel über
-# das Menü zwischen Graustufen und Schwarz-Weiß umschaltbar. Die Werte sind
-# auf dem Gerät ausgesucht: Das OLED zeigt Grau viel heller als jede Vorschau.
-# Ohne Angabe gelten Tonbereich und Kanal des Raums; gamma > 1 dunkelt die
-# Mitten ab, contrast betont Kanten wie bei der 1-Bit-Fassung.
+# --- Greyscale (2 bit) --------------------------------------------------------
+# One greyscale version per image (tools/original.py: to_grey); in the game
+# switchable between greyscale and black and white via the menu. The values were
+# chosen on the device: the OLED shows grey much brighter than any preview.
+# Unless given, the room's tone range and channel apply; gamma > 1 darkens the
+# midtones, contrast emphasises edges as in the 1-bit version.
 
-# Titel: Himmel und Berg höchstens hellgrau, das Logo freigestellt, hell und
-# schwarz umrandet – sonst geht es im aufgehellten Himmel unter.
+# Title: sky and mountain light grey at most, the logo cut out, bright and
+# outlined in black – otherwise it gets lost in the brightened sky.
 greyscale title
   layer weights 0.3 0.3 0.4 tone 15 110 max 2
   subject hue magenta weights 0.5 0 0.5 tone 60 160 min 1 outline
 end
 
-# Kapitelkarte: Schrift, gerastert bleiben die Kanten weich.
+# Chapter card: lettering; dithered, the edges stay soft.
 greyscale card part1
   layer gamma 1.3 dither
 end
@@ -2205,8 +2205,8 @@ greyscale room scummbar
   layer contrast 0.5 gamma 1.3
 end
 
-# Geisterschiff: Blau stark gewichtet, damit das Schiff hell vor der Lava
-# steht, und schwarz umrandet.
+# Ghost ship: blue weighted strongly so that the ship stands out bright
+# against the lava, and outlined in black.
 greyscale room ghostship
   layer weights 0.4 0.3 0.9 tone 20 170
   subject hue blue outline
@@ -2228,9 +2228,9 @@ greyscale room map
   layer contrast 2.0 gamma 1.3
 end
 
-# Küche: innen wie die übrigen Räume, draußen (ab der Wand bei x 212.5) mit
-# eigenem Tonbereich. Der Steg hat dieselbe Farbe wie das Wasser; sein Umriss
-# ist von Hand nachgezeichnet (Originalkoordinaten), er wird hell und umrandet.
+# Kitchen: inside like the other rooms, outside (from the wall at x 212.5) with
+# its own tone range. The pier has the same colour as the water; its outline
+# is traced by hand (original coordinates), it becomes bright and outlined.
 greyscale room kitchen
   layer contrast 0.5 gamma 1.3
   layer from 212.5 tone auto gamma 1.3

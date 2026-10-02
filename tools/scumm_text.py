@@ -1,27 +1,27 @@
 #!/usr/bin/env python3
-"""Texte aus den SCUMM-v4-Skripten einer Originalkopie (Monkey Island 1, VGA).
+"""Texts from the SCUMM v4 scripts of a copy of the game (Monkey Island 1, VGA).
 
-Jede Zeichenkette im Bytecode bekommt einen Bezeichner, der in allen
-Sprachfassungen dieselbe Zeile meint – die Übersetzungen ersetzen nur die
-Texte, nicht die Skripte:
+Every string in the bytecode gets an identifier that refers to the same line
+in all language versions – the translations replace only the texts, not the
+scripts:
 
-  s<n>#k           k-ter Text im globalen Skript n
-  r<raum>.s<n>#k   k-ter Text im Raumskript n
-  r<raum>.en#k     Eintrittscode des Raums (ex: Austritt)
-  o<objekt>#k      Code des Objekts (alle Verben, in Bytecode-Reihenfolge)
-  o<objekt>.name   Objektname
+  s<n>#k           k-th text in global script n
+  r<room>.s<n>#k   k-th text in room script n
+  r<room>.en#k     entry code of the room (ex: exit)
+  o<object>#k      code of the object (all verbs, in bytecode order)
+  o<object>.name   object name
 
-Zählung ab 1, in der Reihenfolge des Bytecodes. Dazu muss jeder Befehl samt
-Parametern genau übersprungen werden; der Decoder folgt dazu dem von
-descumm (scummvm-tools, engines/scumm/descumm.cpp, next_line_V345) für
-Version 4. Die Tests vergleichen beide über alle Skripte beider Fassungen.
+Counting starts at 1, in bytecode order. This requires skipping every command
+including its parameters exactly; the decoder follows the one from
+descumm (scummvm-tools, engines/scumm/descumm.cpp, next_line_V345) for
+version 4. The tests compare both across all scripts of both versions.
 
-Zeichenketten bestehen aus Text in Codepage 437 und Steuersequenzen
-(0xFF/0xFE, Code): 1 Zeilenumbruch, 2 Text stehen lassen, 3 warten (neue
-Sprechblase), 4–7 Variable einsetzen, 9 Animation, 10 Sprachausgabe,
-12 Farbe, 13 unbekannt, 14 Schrift.
+Strings consist of text in code page 437 and control sequences
+(0xFF/0xFE, code): 1 line break, 2 keep text, 3 wait (new
+speech bubble), 4–7 insert variable, 9 animation, 10 speech,
+12 colour, 13 unknown, 14 font.
 
-Aufruf als Skript: listet die Texte einer Kopie.
+Run as a script: lists the texts of a copy.
 """
 import argparse
 import re
@@ -31,38 +31,38 @@ from pathlib import Path
 
 from scumm_v4 import XOR_KEY, ScummError, blocks, find
 
-# Steuercodes, die ein Text enthalten darf, und was daraus wird.
+# Control codes a text may contain, and what they turn into.
 NEWLINE, KEEP, WAIT = 1, 2, 3
 STRING, SOFT_NEWLINE = 7, 8
-# Platzhalter im Ergebnis von plain(): Kennzeichen, dann chr(SLOT_BASE + Platz).
-# Der Platz steht als Zeichen aus dem Unicode-Privatbereich, damit Umbruch und
-# Leerraum-Behandlung ihn nie mit einem Steuer- oder Leerzeichen verwechseln;
-# erst beim Ablegen für die Engine wird daraus ein Byte (Platz + 1).
-STRING_VAR = "\x01"  # String-Variable (Code 7)
-INT_VAR = "\x03"     # Zahl (Code 4)
+# Placeholder in the result of plain(): marker, then chr(SLOT_BASE + slot).
+# The slot is a character from the Unicode private use area so that wrapping and
+# whitespace handling never mistake it for a control or space character;
+# only when stored for the engine does it become a byte (slot + 1).
+STRING_VAR = "\x01"  # string variable (code 7)
+INT_VAR = "\x03"     # number (code 4)
 SLOT_BASE = 0xE000
 INT = 4
 VAR_CODES = {4: "int", 5: "verb", 6: "name", 7: "string"}
 
 
 class Text:
-    """Eine Zeichenkette aus dem Bytecode: Liste aus str und (Code, Wert)."""
+    """A string from the bytecode: list of str and (code, value)."""
 
     def __init__(self, ident, kind, parts, offset):
         self.ident = ident
         self.kind = kind          # print, printEgo, verb, actorName, objectName, setObjectName, codeString, file
         self.parts = parts
-        self.offset = offset      # Position im Block (für die Zuordnung zu Verben)
-        self.verb = None          # bei Objektcode: Verbnummer, deren Code den Text enthält
+        self.offset = offset      # position in the block (for mapping to verbs)
+        self.verb = None          # for object code: verb number whose code contains the text
 
     def plain(self, strings=None, numbers=None):
-        """Text ohne Steuercodes; Zeilenumbruch → '\\n', Warten → '\\f'.
+        """Text without control codes; line break → '\\n', wait → '\\f'.
 
-        Code 8 (Umbruch in langen Dialogoptionen) wird ebenfalls '\\n'.
-        Code 7 gibt eine String-Variable aus; strings bildet deren Nummer im
-        Original auf einen Platz der Engine ab, im Text steht dann
-        STRING_VAR + chr(SLOT_BASE + Platz). Code 4 (Zahl) ebenso mit numbers
-        und INT_VAR."""
+        Code 8 (line break in long dialogue options) also becomes '\\n'.
+        Code 7 outputs a string variable; strings maps its number in the
+        original to an engine slot, and the text then contains
+        STRING_VAR + chr(SLOT_BASE + slot). Code 4 (number) likewise with numbers
+        and INT_VAR."""
         out = []
         for p in self.parts:
             if isinstance(p, str):
@@ -82,7 +82,7 @@ class Text:
         return "".join(out)
 
     def render(self):
-        """Darstellung wie descumm (get_string) – für Tests und Listen."""
+        """Rendering like descumm (get_string) – for tests and listings."""
         out = []
         for p in self.parts:
             if isinstance(p, str):
@@ -93,14 +93,14 @@ class Text:
 
 
 class Decoder:
-    """Läuft linear durch einen v4-Skriptblock und sammelt die Texte."""
+    """Runs linearly through a v4 script block and collects the texts."""
 
     def __init__(self, code, start):
         self.code = code
         self.pos = start
         self.texts = []           # (offset, kind, parts)
 
-    # --- Grundtypen (descumm: get_byte, get_word, get_var, get_list) -----------
+    # --- Basic types (descumm: get_byte, get_word, get_var, get_list) ----------
     def byte(self):
         b = self.code[self.pos]
         self.pos += 1
@@ -150,7 +150,7 @@ class Decoder:
                     if value & 0x2000:
                         self.word()
                 elif code == 10:
-                    # Sprachausgabe: 4 Wörter, dazwischen je die Bytes FF 0A
+                    # Speech: 4 words, each separated by the bytes FF 0A
                     value = self.word()
                     self.pos += 2
                     self.word()
@@ -168,18 +168,18 @@ class Decoder:
         self.texts.append((at, kind, parts))
 
     def args(self, *spec):
-        """Argumente nach descumm-Kürzeln: B, W, V, L, A (Text)."""
+        """Arguments by descumm abbreviations: B, W, V, L, A (text)."""
         for s in spec:
             {"B": self.byte, "W": self.word, "V": self.var, "L": self.lst}[s]()
 
     def a(self, opcode, bit, small):
-        """Ein Argument, Variable wenn das Bit im Opcode gesetzt ist, sonst Byte/Wort."""
+        """One argument: a variable if the bit is set in the opcode, else byte/word."""
         if opcode & bit:
             self.var()
         else:
             self.byte() if small == "B" else self.word()
 
-    # --- Befehle ----------------------------------------------------------------
+    # --- Commands ---------------------------------------------------------------
     def run(self):
         while self.pos < len(self.code):
             self.step()
@@ -195,13 +195,13 @@ class Decoder:
             return
         bits = iter((0x80, 0x40, 0x20))
         for s in spec:
-            if s == "S":                                              # Zielvariable
+            if s == "S":                                              # target variable
                 self.var()
-            elif s in "BW":                                           # Variable oder Konstante
+            elif s in "BW":                                           # variable or constant
                 self.a(op, next(bits), s)
             elif s == "b":
                 self.byte()
-            elif s in "wJ":                                           # Wort, Sprungziel
+            elif s in "wJ":                                           # word, jump target
                 self.word()
             elif s == "v":
                 self.var()
@@ -308,7 +308,7 @@ class Decoder:
                 pass
             elif code == 0xF:
                 self.string(kind)
-                return                                                # Text beendet die Liste
+                return                                                # text ends the list
             else:
                 raise ScummError(f"print: unbekannter Untercode {sub:#x}")
 
@@ -403,7 +403,7 @@ class Decoder:
             if code == 0x1:
                 self.var_or_word(i & 0x80)
             elif code == 0x6:
-                self.step()                                           # eingebetteter Befehl
+                self.step()                                           # embedded command
             elif not 2 <= code <= 5:
                 raise ScummError(f"Ausdruck: unbekannter Code {i:#x}")
 
@@ -412,10 +412,10 @@ def _ops(codes, spec):
     return {c: spec for c in codes}
 
 
-# Opcode → Parameter (descumm.cpp, next_line_V345, Version 4). Kürzel:
-# S Zielvariable, B/W Variable oder Byte/Wort (Opcode-Bits 0x80, 0x40, 0x20
-# der Reihe nach), b/w festes Byte/Wort, v Variable, L Liste, J Sprungziel.
-# Sonderfälle sind Methoden des Decoders.
+# Opcode → parameters (descumm.cpp, next_line_V345, version 4). Abbreviations:
+# S target variable, B/W variable or byte/word (opcode bits 0x80, 0x40, 0x20
+# in order), b/w fixed byte/word, v variable, L list, J jump target.
+# Special cases are methods of the decoder.
 OPCODES = {
     **_ops((0x00, 0xA0, 0x80, 0xC0, 0x20), ""),                     # stop, break, endCutscene, stopMusic
     **_ops((0x01, 0x21, 0x41, 0x61, 0x81, 0xA1, 0xC1, 0xE1), "BWW"),  # putActor
@@ -446,7 +446,7 @@ OPCODES = {
     0x40: "L",                                                       # cutscene
     **_ops((0x42, 0xC2), "BL"),                                      # chainScript
     **_ops((0x72, 0xF2, 0x62, 0xE2, 0x52, 0xD2, 0x1C, 0x9C, 0x3C, 0xBC,
-            0x02, 0x82, 0x60, 0xE0), "B"),                            # ein Byte-Argument
+            0x02, 0x82, 0x60, 0xE0), "B"),                            # one byte argument
     **_ops((0x66, 0xE6, 0x43, 0xC3, 0x23, 0xA3), "SW"),              # getClosestObjActor, getActorX/Y
     0xAE: Decoder.wait,
     **_ops((0x34, 0x74, 0xB4, 0xF4), "SWW"),                         # getDist
@@ -485,7 +485,7 @@ OPCODES = {
 
 
 def _verb_table(block):
-    """OC-Block (ab Blockanfang): {Verb: Codeoffset} und Codestart (descumm:
+    """OC block (from block start): {verb: code offset} and code start (descumm:
     skipVerbHeader_V34)."""
     table, at = {}, 19
     while block[at]:
@@ -497,7 +497,7 @@ def _verb_table(block):
 
 
 def decode_block(block, ident):
-    """Texte eines Skriptblocks (mit 6-Byte-Kopf: Größe, Tag)."""
+    """Texts of a script block (with 6-byte header: size, tag)."""
     tag = block[4:6].decode("latin1")
     if tag == "OC":
         verbs, start = _verb_table(block)
@@ -531,23 +531,23 @@ def _directory(game_dir, tag):
 
 
 def iter_blocks(game_dir):
-    """(Bezeichner, Block mit Kopf) für alle Skriptblöcke einer Kopie:
-    globale Skripte, Raumskripte, Ein-/Austritt, Objektcode."""
+    """(identifier, block with header) for all script blocks of a copy:
+    global scripts, room scripts, entry/exit, object code."""
     game_dir = Path(game_dir)
     files = sorted(game_dir.glob("DISK*.LEC"), key=lambda p: p.name.upper())
     if not files:
         raise ScummError(f"keine DISK*.LEC in {game_dir}")
     disks = [bytes(b ^ XOR_KEY for b in p.read_bytes()) for p in files]
 
-    room_blocks = {}                                                  # Raum → (Daten, LF-Anfang)
+    room_blocks = {}                                                  # room → (data, LF start)
     for data in disks:
-        for i in range(data[12]):                                     # FO-Block nach dem LE-Kopf
+        for i in range(data[12]):                                     # FO block after the LE header
             room, lf = struct.unpack_from("<BI", data, 13 + i * 5)
             if data[lf + 4:lf + 6] == b"LF":
                 room_blocks.setdefault(room, (data, lf))
 
-    # Globale Skripte über das Verzeichnis (Offsets ab Raumblock + 8). Einige
-    # Einträge zeigen ins Leere (ungenutzte Nummern) – die gibt es nicht.
+    # Global scripts via the directory (offsets from room block + 8). Some
+    # entries point nowhere (unused numbers) – those do not exist.
     for number, (room, offset) in enumerate(_directory(game_dir, "0S")):
         if not room or room not in room_blocks:
             continue
@@ -574,7 +574,7 @@ def iter_blocks(game_dir):
 
 
 def read_texts(game_dir):
-    """{Bezeichner: Text} für alle Skripte einer Kopie, dazu die Objektnamen."""
+    """{identifier: Text} for all scripts of a copy, plus the object names."""
     texts = {}
     for ident, block in iter_blocks(game_dir):
         for t in decode_block(block, ident):

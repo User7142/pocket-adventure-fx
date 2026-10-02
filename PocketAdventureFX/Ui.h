@@ -2,38 +2,38 @@
 
 #include "Common.h"
 
-// Bedienung und Darstellung über der Spielwelt.
+// Controls and rendering on top of the game world.
 //
-// Steuerung im Spiel:
-//   Steuerkreuz  Cursor bewegen (beschleunigt beim Halten)
-//   A            Satz ausführen („Gehe zu“ oder das gewählte Verb)
-//   B            Menü: Verben und Inventar
-// Während Text läuft: A überspringt. Im Dialog: hoch/runter, A wählt.
+// In-game controls:
+//   D-pad        move cursor (accelerates when held)
+//   A            execute sentence (“Walk to” or the selected verb)
+//   B            menu: verbs and inventory
+// While text is shown: A skips. In a dialogue: up/down, A chooses.
 namespace Ui {
   void reset();
-  void update();  // Eingabe; startet ggf. Skripte
+  void update();  // input; starts scripts if needed
   void draw();
-  uint8_t hovered();  // Objekt unter dem Mauszeiger oder NONE8
+  uint8_t hovered();  // object under the cursor or NONE8
 
-  // Sprechtext (vom Skript). Läuft nach Textlänge ab oder per A.
+  // Speech text (from the script). Expires after a time based on its length, or via A.
   void say(uint8_t actor, uint24_t text);
   bool talking();
 
-  // Vollbild (Kapitelkarte, vom Skript): steht, bis die Musik endet (ohne
-  // Musik 3 s) oder A gedrückt wird – wie das Überspringen im Original.
-  void card(uint24_t image, uint24_t grey, uint8_t music);  // grey: Graustufen-Fassung|NONE24
+  // Full screen (chapter card, from the script): stays until the music ends (without
+  // music 3 s) or A is pressed – like skipping in the original.
+  void card(uint24_t image, uint24_t grey, uint8_t music);  // grey: greyscale version|NONE24
   bool showingCard();
   void drawCard();
 
-  // Blitz (vom Skript, z. B. die Vision der Voodoo-Lady): das Display
-  // blinkt frames lang invertiert, im Takt von 4 Frames. inverted() sagt,
-  // ob es gerade invertiert sein soll; der Sketch schickt das ans Display,
-  // während es für die Bildübertragung ausgewählt ist.
+  // Flash (from the script, e.g. the Voodoo Lady's vision): the display
+  // blinks inverted for `frames` frames, in a 4-frame cycle. inverted() says
+  // whether it should currently be inverted; the sketch sends that to the display
+  // while it is selected for the image transfer.
   void flash(uint8_t frames);
   bool inverted();
 
-  // Dialogauswahl (vom Skript): beginChoice, addChoice je sichtbare Option,
-  // dann ask – erst ab da gilt die Auswahl (false: keine Option sichtbar).
+  // Dialogue choice (from the script): beginChoice, addChoice per visible option,
+  // then ask – only from then on is the choice active (false: no option visible).
   void beginChoice();
   void addChoice(uint24_t text, uint24_t target);
   bool ask();

@@ -1,10 +1,10 @@
-"""Textleser für SCUMM v4 (tools/scumm_text.py).
+"""Text reader for SCUMM v4 (tools/scumm_text.py).
 
-Der Leser muss jeden Befehl samt Parametern genau überspringen, sonst
-verrutschen die Textnummern. Prüfstein ist descumm (scummvm-tools): Für jeden
-Skriptblock einer Kopie müssen beide dieselben Zeichenketten in derselben
-Reihenfolge finden. Braucht eine Originalkopie (ORIGINAL bzw. ORIGINAL_DE in
-der Umgebung oder config.mk) und descumm im Pfad, sonst übersprungen.
+The reader must skip every command with its parameters exactly, otherwise
+the text numbers shift. The yardstick is descumm (scummvm-tools): for every
+script block of a copy, both must find the same strings in the same
+order. Needs a copy of the game (ORIGINAL or ORIGINAL_DE in the
+environment or config.mk) and descumm on the path, otherwise skipped.
 """
 import os
 import re
@@ -34,7 +34,7 @@ def _config(name):
 
 COPIES = {lang: _config(var) for lang, var in (("en", "ORIGINAL"), ("de", "ORIGINAL_DE"))}
 
-# descumm stellt Text als "…" dar; \xNN und \" bzw. \\ sind Maskierungen.
+# descumm shows text as "…"; \xNN and \" or \\ are escapes.
 _QUOTED = re.compile(rb'"((?:[^"\\]|\\.)*)"')
 
 
@@ -92,8 +92,8 @@ class TextObject(unittest.TestCase):
         self.assertEqual(t.plain(), "Hallo\nWelt\f!")
 
     def test_plain_option_break_and_string_variable(self):
-        # Code 8 bricht lange Dialogoptionen um; Code 7 setzt eine
-        # String-Variable ein, sofern die Engine sie kennt (Nummer → Wert).
+        # Code 8 wraps long dialogue options; code 7 inserts a
+        # string variable, provided the engine knows it (number → value).
         t = scumm_text.Text("x#1", "verb", ["Lang ", (8, 0x2020), "er"], 0)
         self.assertEqual(t.plain(), "Lang \ner")
         t = scumm_text.Text("x#1", "print", ["Hallo ", (7, 30), "."], 0)

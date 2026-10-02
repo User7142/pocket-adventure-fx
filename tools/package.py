@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Packt Sketch und FX-Daten in ein .arduboy-Paket.
+"""Packs sketch and FX data into an .arduboy package.
 
-Format (Schema 4, wie es Arduboy Toolset und Cart-Editoren lesen): ein ZIP
-mit info.json, dem Sketch als Intel-HEX, den FX-Daten und einem Cart-Bild
-(128×64, hier das Titelbild). Die FX-Datenseite trägt der Cart-Builder selbst
-ins Programm ein; die Engine liest sie über FX::begin().
+Format (schema 4, as read by Arduboy Toolset and cart editors): a ZIP
+with info.json, the sketch as Intel HEX, the FX data and a cart image
+(128×64, here the title image). The cart builder itself patches the FX data
+page into the program; the engine reads it via FX::begin().
 
-Das Paket entsteht aus der eigenen Originalkopie und enthält deren Grafiken
-und Texte – es ist nur für den eigenen Gebrauch, nicht zum Weitergeben.
+The package is built from your own copy of the game and contains its graphics
+and texts – it is for personal use only, not for redistribution.
 """
 import argparse
 import datetime
@@ -22,9 +22,9 @@ TITLE = "Pocket Adventure FX"
 
 
 def languages(game_bin):
-    """Namen der Sprachen aus dem Sprachverzeichnis am Anfang von game.bin
-    (advc.py: LangDir u16 magic, u16 build, u8 Anzahl; je LangEntry u24 Name,
-    u24 Header)."""
+    """Language names from the language directory at the start of game.bin
+    (advc.py: LangDir u16 magic, u16 build, u8 count; per LangEntry u24 name,
+    u24 header)."""
     data = game_bin.read_bytes()
     if int.from_bytes(data[0:2], "little") != 0x464D:
         raise ValueError(f"{game_bin}: kein Spieldatenblock von advc.py")
