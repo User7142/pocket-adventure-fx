@@ -257,7 +257,7 @@ copy with `tools/scumm_text.py <copy>`. Own texts of the engine use `ui.<key>`.
 
 - **spinal** ([community.arduboy.com](https://community.arduboy.com/t/the-first-scenes-of-the-secret-of-monkey-island-on-the-arduboy-fx/13756)):
   the Windows build guide above, the tip for extracting the original floppies, and the
-  suggestion to use the Arduboy’s greyscale mode.
+  suggestion to use the Arduboy’s greyscale mode (work in progress).
 
 ## Legal
 
