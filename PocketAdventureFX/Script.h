@@ -2,16 +2,16 @@
 
 #include "Common.h"
 
-// Bytecode-Interpreter für die Skripte aus game.adv (Opcodes: gamedata.h).
+// Bytecode interpreter for the scripts from game.adv (opcodes: gamedata.h).
 //
-// Es läuft immer höchstens ein Skript. Solange es läuft, ist die Eingabe
-// gesperrt – jedes Skript ist also eine kleine Zwischensequenz. Blockierende
-// Befehle (say, walk, wait, choose) halten es an, bis die Welt oder die
-// Oberfläche das Ereignis melden.
+// At most one script runs at any time. While it runs, input is
+// locked – so every script is a small cutscene. Blocking
+// commands (say, walk, wait, choose) pause it until the world or the
+// UI reports the event.
 namespace Script {
   void start(uint24_t address);
   bool running();
-  void update();                  // einmal pro Frame
-  void chosen(uint24_t target);   // Oberfläche: Dialogoption gewählt
-  void stopRoutine();             // alle Hintergrundabläufe beenden (neues Spiel)
+  void update();                  // once per frame
+  void chosen(uint24_t target);   // UI: dialogue option chosen
+  void stopRoutine();             // stop all background routines (new game)
 }

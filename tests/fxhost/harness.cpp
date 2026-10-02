@@ -1,38 +1,38 @@
-// Host-Prüfstand für die Engine: dieselben Quellen wie auf dem Arduboy, gegen
-// eine Nachbildung von Arduboy2/ArduboyFX übersetzt, mit game.bin als FX-Flash.
+// Host test bench for the engine: the same sources as on the Arduboy, compiled
+// against a stand-in for Arduboy2/ArduboyFX, with game.bin as the FX flash.
 //
-// Der Prüfstand spielt wie ein Mensch – er drückt Tasten, fährt den Cursor
-// auf ein Objekt und wählt Verben im Menü – und schreibt mit, was passiert:
-// Raumwechsel, Texte, Dialogoptionen, Karten, Musik, Türzustände, Figuren.
-// tests/test_fxhost.py vergleicht diese Spur mit den Texten der eigenen
-// Originalkopie, das Repo selbst enthält also keine Originaltexte.
+// The test bench plays like a human – it presses keys, moves the cursor
+// onto an object and picks verbs in the menu – and records what happens:
+// room changes, texts, dialogue options, cards, music, door states, characters.
+// tests/test_fxhost.py compares this trace with the texts of your own
+// copy of the game, so the repo itself contains no original texts.
 //
-// Aufruf: fxhost <game.bin> < befehle
-//   lang <n>          Sprache n in der Auswahl wählen
-//   start             Titelbild: A
-//   idle              warten, bis kein Skript, Text, Dialog oder Karte mehr läuft
-//   frames <n>        n Frames ohne Eingabe
-//   choose <n>        im laufenden Dialog Option n (ab 0) wählen
-//   select <n>        Auswahl auf Option n bewegen, ohne zu bestätigen
-//   do <verb> <obj>   Verb im Menü wählen, Cursor aufs Objekt, A
-//   verb <verb>       nur das Verb im Menü wählen
-//   inv <verb> <obj>  Verb und dann einen Gegenstand im Inventar wählen
-//   aim <obj>         nur den Cursor aufs Objekt fahren (läuft nicht hin)
-//   click             A drücken
-//   press <taste>     eine Taste antippen: a b up down left right
-//   walk <x> <y>      in Raumkoordinaten hinlaufen (Klick auf leere Stelle)
-//   seed <n>          Zufallsgenerator setzen
-//   pos <actor>       Position eines Actors ausgeben
-//   shot <datei.png>  aktuelles Bild speichern (4-fach vergrößert)
-//   grey              im Menü Graustufen an/aus umschalten
-//   drawcheck         Text und Rechtecke der Engine (Common.h) gegen die Pixel-Vorlage prüfen
-//   tones [x0 y0 x1 y1]  Pixel je Stufe im angezeigten Bild (schwarz … weiß),
-//                     wahlweise nur im Ausschnitt
-//   until <actor> <|> <x>   warten, bis der Actor im Raum ist und x (px) passt
+// Run: fxhost <game.bin> < commands
+//   lang <n>          pick language n in the selection
+//   start             title screen: A
+//   idle              wait until no script, text, dialogue or card is running
+//   frames <n>        n frames without input
+//   choose <n>        pick option n (from 0) in the running dialogue
+//   select <n>        move the selection to option n without confirming
+//   do <verb> <obj>   pick verb in the menu, cursor onto the object, A
+//   verb <verb>       only pick the verb in the menu
+//   inv <verb> <obj>  pick verb and then an item in the inventory
+//   aim <obj>         only move the cursor onto the object (does not walk there)
+//   click             press A
+//   press <key>       tap a key: a b up down left right
+//   walk <x> <y>      walk there in room coordinates (click on an empty spot)
+//   seed <n>          set the random generator
+//   pos <actor>       print an actor's position
+//   shot <file.png>   save the current image (scaled up 4x)
+//   grey              toggle greyscale on/off in the menu
+//   drawcheck         check the engine's text and rectangles (Common.h) against the pixel reference
+//   tones [x0 y0 x1 y1]  pixels per level in the displayed image (black … white),
+//                     optionally only within the cutout
+//   until <actor> <|> <x>   wait until the actor is in the room and x (px) matches
 //
-// Ui.cpp wird hier eingebunden statt getrennt übersetzt: so sieht der
-// Prüfstand Cursor, Menü und Dialogzustand, ohne dass die Engine dafür
-// eine Testschnittstelle braucht.
+// Ui.cpp is included here instead of compiled separately: this way the
+// test bench sees cursor, menu and dialogue state without the engine
+// needing a test interface for it.
 
 #include "../../PocketAdventureFX/Ui.cpp"
 
@@ -42,10 +42,10 @@ namespace host {
   uint8_t buttons;
   std::vector<uint8_t> flash;
   uint8_t screen[WIDTH * HEIGHT / 8];
-  uint8_t shown[PLANES][WIDTH * HEIGHT / 8];  // zuletzt angezeigte Ebenen (ArduboyG)
+  uint8_t shown[PLANES][WIDTH * HEIGHT / 8];  // last displayed planes (ArduboyG)
   bool inverted;
 
-  // Wie ArduboyG: Ebene übertragen, danach ist der Puffer leer.
+  // Like ArduboyG: transfer the plane, afterwards the buffer is empty.
   void displayed(uint8_t plane) {
     std::memcpy(shown[plane], screen, sizeof(screen));
     std::memset(screen, 0, sizeof(screen));
@@ -66,13 +66,13 @@ long random(long howbig) {
   return howbig > 0 ? std::rand() % howbig : 0;
 }
 
-// Ohne Lautsprecher: ein Stück „spielt“ eine feste Zeit, damit Karten mit
-// Musik wie auf dem Gerät erst danach enden.
+// Without a speaker: a track "plays" for a fixed time, so cards with
+// music end only afterwards, as on the device.
 namespace Sound {
   constexpr uint16_t TRACK_FRAMES = 600;
   uint8_t track = NONE8;
   uint16_t left;
-  uint8_t started = NONE8;  // in diesem Frame gestartet: meldet report() nach dem Raum
+  uint8_t started = NONE8;  // started in this frame: report() reports it after the room
 
   void begin(uint24_t, uint8_t) {}
   void stop() {
@@ -95,10 +95,10 @@ void setup();
 void loop();
 
 namespace {
-  constexpr uint32_t LIMIT = 60 * 60 * 5;  // kein Befehl wartet länger als 5 Minuten Spielzeit
+  constexpr uint32_t LIMIT = 60 * 60 * 5;  // no command waits longer than 5 minutes of game time
   uint32_t frame;
 
-  // Was zuletzt berichtet wurde
+  // What was last reported
   uint8_t lastRoom = NONE8;
   std::string lastText;
   bool lastChoice, lastCard;
@@ -158,8 +158,8 @@ namespace {
     std::fflush(stdout);
   }
 
-  // Ein Frame: jede Ebene einmal zeichnen, dabei ein Schritt Spiellogik
-  // (shim/ArduboyG.h) – wie auf dem Gerät, nur ohne dessen Takt.
+  // One frame: draw every plane once, with one step of game logic
+  // (shim/ArduboyG.h) – as on the device, just without its timing.
   void step(uint8_t pressed = 0) {
     host::buttons = pressed;
     host::cursorDrawn = false;
@@ -178,13 +178,13 @@ namespace {
     std::exit(1);
   }
 
-  // Bild als PNG, 4-fach, damit es sich ansehen lässt: je Pixel die Zahl der
-  // hellen Ebenen als Grauwert, so wie das Auge die drei Ebenen mischt.
+  // Image as PNG, 4x, so it can be viewed: per pixel the number of lit
+  // planes as a grey value, the way the eye blends the three planes.
   void png(const std::string& path) {
     constexpr int S = 4, W = WIDTH * S, H = HEIGHT * S;
     std::vector<uint8_t> raw;
     for (int y = 0; y < H; ++y) {
-      raw.push_back(0);  // Filter: keiner
+      raw.push_back(0);  // filter: none
       for (int x = 0; x < W; ++x) {
         int px = x / S, py = y / S;
         uint8_t lit = 0;
@@ -229,12 +229,12 @@ namespace {
     }
   }
 
-  // Cursor mit dem Steuerkreuz auf eine Bildschirmposition fahren.
+  // Move the cursor to a screen position with the D-pad.
   void moveCursor(int16_t x, int16_t y) {
     for (uint32_t n = 0; cursorX != x || cursorY != y; ++n) {
       if (n > 2000) fail("Cursor erreicht das Ziel nicht");
       int16_t dx = x - cursorX, dy = y - cursorY;
-      // Ab 20 Frames Halten springt der Cursor um 2; kurz vor dem Ziel loslassen.
+      // After 20 frames of holding the cursor jumps by 2; release just before the target.
       bool near = (dx && std::abs(dx) < 3) || (dy && std::abs(dy) < 3);
       uint8_t b = 0;
       if (dx < 0) b |= LEFT_BUTTON;
@@ -260,7 +260,7 @@ namespace {
     tap(A_BUTTON);
   }
 
-  // Zeile „Graustufen an/aus“ im Menü wählen.
+  // Pick the "greyscale on/off" line in the menu.
   void toggleGrey() {
     idle();
     tap(B_BUTTON);
@@ -273,11 +273,11 @@ namespace {
     std::printf("greyscale %d\n", greyscale);
   }
 
-  // Arduboy::write und Arduboy::fillRect (Common.h) arbeiten seitenweise auf
-  // dem Puffer; das Ergebnis muss Pixel für Pixel der Vorlage entsprechen
-  // (drawChar bzw. fillRect der Nachbildung, Pixel für Pixel) – für jedes
-  // Zeichen, jede Lage (auch angeschnitten), jede Farbe und ohne Nachbarpixel
-  // zu verändern (Puffer vorher gemustert).
+  // Arduboy::write and Arduboy::fillRect (Common.h) work page-wise on the
+  // buffer; the result must match the reference pixel for pixel
+  // (drawChar or fillRect of the stand-in, pixel by pixel) – for every
+  // character, every position (also clipped), every colour and without
+  // changing neighbouring pixels (buffer patterned beforehand).
   void drawCheck() {
     const uint8_t colors[][2] = {{WHITE, BLACK}, {BLACK, WHITE}, {WHITE, WHITE}, {BLACK, BLACK}};
     uint8_t fast[sizeof(host::screen)], reference[sizeof(host::screen)];
@@ -300,7 +300,7 @@ namespace {
                    std::to_string(y) + " Farbe " + std::to_string(fg) + "/" + std::to_string(bg));
             ++checked;
           }
-    // Ganze Texte (print → write(Puffer, n)): Zeilenstücke, Umbrüche, Ränder
+    // Whole texts (print → write(buffer, n)): line pieces, line breaks, edges
     const char* texts[] = {"Hello, I'm Guybrush!", "Two\nlines\r here", "\n\nend", "",
                            "A very long line that runs far past the right edge of the display"};
     for (auto [fg, bg] : colors)
@@ -344,8 +344,8 @@ namespace {
             }
     std::printf("rectcheck %u\n", rects);
 
-    // drawScreen liest bündige Seiten direkt aus dem Flash; jeder Raum an
-    // mehreren Stellen, 1 Bit und jede Graustufen-Ebene, wie FX::drawBitmap.
+    // drawScreen reads aligned pages straight from the flash; every room at
+    // several positions, 1 bit and every greyscale plane, like FX::drawBitmap.
     uint32_t screens = 0;
     bool wasGrey = greyscale;
     for (uint8_t r = 0; r < World::header.roomCount; ++r) {
@@ -375,8 +375,8 @@ namespace {
     std::printf("screencheck %u\n", screens);
   }
 
-  // Wie viele Pixel des angezeigten Bilds in wie vielen Ebenen hell sind –
-  // 0 schwarz, 1 dunkelgrau, 2 hellgrau, 3 weiß.
+  // How many pixels of the displayed image are lit in how many planes –
+  // 0 black, 1 dark grey, 2 light grey, 3 white.
   void tones(int16_t x0 = 0, int16_t y0 = 0, int16_t x1 = WIDTH, int16_t y1 = HEIGHT) {
     uint32_t count[host::PLANES + 1] = {};
     for (int16_t y = y0; y < y1; ++y)
@@ -388,7 +388,7 @@ namespace {
     std::printf("tones %u %u %u %u\n", count[0], count[1], count[2], count[3]);
   }
 
-  // Gegenstand im Inventar über das Menü wählen (Verb vorher gewählt).
+  // Pick an item in the inventory via the menu (verb picked beforehand).
   void pickInventory(uint8_t object) {
     uint8_t i = 0;
     while (i < World::inventoryCount && World::inventory[i] != object) ++i;
@@ -406,7 +406,7 @@ namespace {
     tap(A_BUTTON);
   }
 
-  // Ein sichtbarer Punkt, an dem hitTest das Objekt liefert.
+  // A visible point at which hitTest returns the object.
   bool visiblePoint(uint8_t object, int16_t& sx, int16_t& sy) {
     PlaceRec p;
     if (!World::findPlace(object, p)) return false;
@@ -433,12 +433,12 @@ namespace {
 
   void walk(int16_t x, int16_t y) {
     idle();
-    // Ziel außerhalb des Bildes: in Etappen hinlaufen, die Kamera folgt.
+    // Target outside the screen: walk there in stages, the camera follows.
     for (int n = 0; n < 12; ++n) {
       int16_t s = x - World::scrollX, t = y - World::scrollY;
       int16_t cs = s < 0 ? 0 : s >= WIDTH ? WIDTH - 1 : s;
       int16_t cy = t < BAR_H ? BAR_H : t >= HEIGHT ? HEIGHT - 1 : t;
-      // Nur auf freie Stellen klicken: ein Objekt dort würde ausgelöst.
+      // Only click on free spots: an object there would be triggered.
       auto hit = [&](int16_t px, int16_t py) { return World::hitTest(px + World::scrollX, py + World::scrollY); };
       for (int16_t d = 1; hit(cs, cy) != NONE8 && d < HEIGHT; ++d) {
         int16_t u = (d & 1) ? cy + (d + 1) / 2 : cy - d / 2;
@@ -467,7 +467,7 @@ namespace {
     for (int n = 0; !visiblePoint(object, sx, sy); ++n) {
       PlaceRec p;
       if (n > 5 || !World::findPlace(object, p)) fail("Objekt " + std::to_string(object) + " nicht im Raum");
-      // Erst hinlaufen; dabei geht das gewählte Verb verloren, also neu wählen.
+      // Walk there first; this loses the picked verb, so pick it again.
       if (p.walkX == WALK_DIRECT) walk(p.x + p.w / 2, p.y + p.h);
       else walk(p.walkX, p.walkY);
       chooseVerb(v);

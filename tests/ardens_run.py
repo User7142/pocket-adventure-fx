@@ -1,16 +1,16 @@
-"""Szenen im Emulator Ardens spielen – mit dem echten AVR-Programm.
+"""Play scenes in the Ardens emulator – with the real AVR program.
 
-Gegenstück zum Host-Prüfstand (tests/fxhost): dieselben Befehle auf stdin,
-dieselbe Spur auf stdout, nur läuft das gebaute Paket im Ardens-Web-Player
-(headless Chromium über Playwright). Der Treiber drückt Tasten und liest den
-Zustand des Spiels aus dem emulierten RAM: Die Adressen der Variablen stehen
-in der ELF-Datei des Sketches (avr-nm), den RAM findet er im Speicher des
-Emulators über den GameHeader, der Byte für Byte aus game.bin stammt.
+Counterpart to the host test bench (tests/fxhost): the same commands on stdin,
+the same trace on stdout, only the built package runs in the Ardens web player
+(headless Chromium via Playwright). The driver presses keys and reads the
+game state from the emulated RAM: the variable addresses are in the
+sketch's ELF file (avr-nm); it finds the RAM in the emulator's memory
+via the GameHeader, which comes byte for byte from game.bin.
 
-Aufruf (eigene Python-Umgebung mit Playwright und Chromium):
-    python tests/ardens_run.py <ardens-player-verzeichnis> < befehle
-Befehle wie bei tests/fxhost/harness.cpp; „seed“ wird ignoriert (der
-Zufallsgenerator des Geräts läuft für sich).
+Run (separate Python environment with Playwright and Chromium):
+    python tests/ardens_run.py <ardens-player-directory> < commands
+Commands as in tests/fxhost/harness.cpp; "seed" is ignored (the
+device's random generator runs on its own).
 """
 import asyncio
 import functools
@@ -35,13 +35,13 @@ OBJ_OWNED, OBJ_HIDDEN, OBJ_STATE = 0x80, 0x40, 0x3F
 SUBPIXEL_SHIFT = 4
 STRING_VAR, INT_VAR = 0x01, 0x03
 KEYS = {"a": "a", "b": "s", "up": "ArrowUp", "down": "ArrowDown", "left": "ArrowLeft", "right": "ArrowRight"}
-BITS = {"a": 0x08, "b": 0x04, "up": 0x80, "down": 0x10, "left": 0x20, "right": 0x40}   # Arduboy-Tastenbits
+BITS = {"a": 0x08, "b": 0x04, "up": 0x80, "down": 0x10, "left": 0x20, "right": 0x40}   # Arduboy button bits
 FRAME = 1000 / 60
 
-# Mitschreiben im Browser: nach jedem Animationsframe (also direkt hinter dem
-# Emulator) die beobachteten Bytes vergleichen und Änderungen mit dem
-# Bildzähler des Sketches festhalten. Python holt sie mit drain() ab – so
-# entgeht kein kurzer Text, auch wenn die Abfrage aus Python stockt.
+# Recording in the browser: after every animation frame (i.e. right behind the
+# emulator) compare the watched bytes and record changes with the
+# sketch's frame counter. Python fetches them with drain() – so no
+# short text is missed, even if polling from Python stalls.
 SAMPLER = """(cfg) => {
   const H = () => Module.HEAPU8;
   const read = (a, n) => Array.from(H().subarray(cfg.base + a, cfg.base + a + n));
@@ -67,7 +67,7 @@ LIMIT_MS = 5 * 60 * 1000
 
 
 def symbols():
-    """Name → (Adresse im SRAM, Größe) aus der ELF-Datei."""
+    """Name → (address in SRAM, size) from the ELF file."""
     nm = next((ROOT / "build" / "arduino").rglob("avr-nm"), None) or "avr-nm"
     out = subprocess.run([str(nm), "-C", "-S", str(ELF)], capture_output=True, text=True, check=True).stdout
     syms = {}
@@ -85,7 +85,7 @@ def constants():
 
 
 def structs():
-    """Felder der Datensätze aus gamedata.h: Name → {feld: (offset, größe)}."""
+    """Record fields from gamedata.h: name → {field: (offset, size)}."""
     sizes = {"uint8_t": 1, "int8_t": 1, "uint16_t": 2, "int16_t": 2, "__uint24": 3}
     out = {}
     for name, body in re.findall(r"struct (\w+) \{(.*?)\};", HEADER_H.read_text(), re.S):
@@ -103,7 +103,7 @@ def le(b, off, n):
 
 
 class Game:
-    """Statische Daten aus game.bin (wie die Engine sie liest)."""
+    """Static data from game.bin (as the engine reads it)."""
 
     def __init__(self):
         self.data = GAME.read_bytes()
@@ -135,7 +135,7 @@ class Game:
         return [self.record("PlaceRec", room_rec["places"] + i * n) for i in range(room_rec["placeCount"])]
 
     def string(self, address, ram):
-        """Wie World::readString, mit Platzhaltern aus dem RAM."""
+        """Like World::readString, with placeholders from RAM."""
         out = []
         while True:
             c = self.data[address]
@@ -215,7 +215,7 @@ class Driver:
         print(line, flush=True)
 
     def fields(self):
-        """Was der Sampler im Browser beobachtet: Name → (Adresse, Länge)."""
+        """What the sampler in the browser watches: name → (address, length)."""
         s = self.syms
         stride = s["World::actors"][1] // self.n_actors
         f = {"room": (s["World::room"][0], 1), "card": (s["cardImage"][0], 3), "track": (s["currentTrack"][0], 1),
@@ -230,8 +230,8 @@ class Driver:
                                            "fields": self.fields()})
 
     async def report(self):
-        """Änderungen seit dem letzten Aufruf in der Reihenfolge des Prüfstands
-        ausgeben (Raum, Musik, Karte, Text, Optionen, Zustände, Figuren)."""
+        """Print changes since the last call in the test bench's order
+        (room, music, card, text, options, states, characters)."""
         events = await self.page.evaluate("() => window.__mi.drain()")
         stride = self.syms["World::actors"][1] // self.n_actors
         for e in events:
@@ -277,7 +277,7 @@ class Driver:
                                         self.base + self.syms["Arduboy2Base::frameCount"][0])
 
     async def frames(self, n):
-        """n Bilder des Spiels abwarten (nicht Millisekunden: der Browser darf stocken)."""
+        """Wait for n game frames (not milliseconds: the browser may stall)."""
         start = await self.frame()
         while (await self.frame() - start) & 0xFFFF < n:
             await self.report()
@@ -290,8 +290,8 @@ class Driver:
         return await self.page.evaluate("(a) => Module.HEAPU8[a]", self.base + self.syms["Arduboy2Base::currentButtonState"][0])
 
     async def tap(self, key):
-        """Taste drücken, bis das Spiel sie gesehen und einen Frame lang verarbeitet
-        hat, dann loslassen und warten, bis es auch das gesehen hat."""
+        """Hold a key until the game has seen it and processed it for one frame,
+        then release it and wait until the game has seen that too."""
         await self.page.keyboard.down(KEYS[key])
         for _ in range(500):
             if await self.buttons() & BITS[key]:
@@ -328,7 +328,7 @@ class Driver:
     async def idle(self):
         await self.until(lambda r: not self.busy(r), "idle")
 
-    # --- Cursor, Menü, Objekte (wie harness.cpp) ---
+    # --- Cursor, menu, objects (as in harness.cpp) ---
 
     async def move_cursor(self, x, y):
         for _ in range(400):
@@ -555,7 +555,7 @@ async def main(player_dir):
     game = Game()
     lines = sys.stdin.read().splitlines()
 
-    # Player und Paket über einen eigenen kleinen Webserver ausliefern.
+    # Serve player and package via our own small web server.
     class Handler(http.server.SimpleHTTPRequestHandler):
         def translate_path(self, path):
             if path.split("?")[0].endswith(PACKAGE.name):
@@ -584,11 +584,11 @@ async def main(player_dir):
             loadFile('file', f, buf);}""", PACKAGE.name)
         await page.click("#canvas")
         header_addr = syms["World::header"][0]
-        # Der GameHeader steht auch in den Kopien des FX-Flashs; der SRAM ist
-        # die Fundstelle, an der der Stapelzeiger (SPL/SPH an 0x5D/0x5E des
-        # Datenraums) in den SRAM zeigt. Er ist erst nach setup() gefüllt.
+        # The GameHeader is also in the copies of the FX flash; the SRAM is
+        # the match where the stack pointer (SPL/SPH at 0x5D/0x5E of the
+        # data space) points into SRAM. It is only filled after setup().
         base = None
-        for _ in range(600):   # bis 60 s, auch wenn der Rechner ausgelastet ist
+        for _ in range(600):   # up to 60 s, even if the machine is busy
             found = await page.evaluate("""(heads) => {
                 const h = Module.HEAPU8, out = [];
                 for (const pat of heads)
@@ -624,6 +624,6 @@ async def main(player_dir):
 
 
 if __name__ == "__main__":
-    # Ausgabe wie beim Host-Prüfstand in CP437 (dem Zeichensatz der Spieltexte)
+    # Output in CP437 like the host test bench (the game texts' character set)
     sys.stdout.reconfigure(encoding="cp437")
     sys.exit(asyncio.run(main(sys.argv[1])))

@@ -1,26 +1,26 @@
 #!/usr/bin/env python3
-"""Liest Raumhintergründe aus SCUMM-v4-Spieldaten (Monkey Island 1, VGA-Disketten).
+"""Reads room backgrounds from SCUMM v4 game data (Monkey Island 1, VGA floppies).
 
-Die Originaldateien (DISK01.LEC …) bleiben, wo sie sind; dieses Modul liest sie
-nur. Extrahierte Bilder gehören nicht ins Repo (siehe .gitignore), sie werden
-beim Build aus der eigenen Kopie erzeugt.
+The original files (DISK01.LEC …) stay where they are; this module only reads
+them. Extracted images do not belong in the repo (see .gitignore); they are
+generated at build time from your own copy.
 
-Format (nach ScummVM, engines/scumm: resource_v4.cpp, room.cpp, gfx.cpp):
-  * Dateien sind mit 0x69 XOR-verschlüsselt.
-  * Blöcke: u32 Größe (inkl. Kopf, little-endian) + 2-Zeichen-Tag.
-    LE (Datei) → LF (Raum, danach u16 Raumnummer) → RO → HD, PA, BM, …
-  * HD: u16 Breite, u16 Höhe, u16 Objektanzahl.
-  * PA: u16 Bytezahl, danach RGB-Tripel.
-  * BM: u32 Länge, danach je 8-px-Streifen ein u32-Offset (relativ zum
-    Datenanfang), an dem der Streifen mit einem Codec-Byte beginnt.
-  * BX: u8 Anzahl, danach je Box 4 Eckpunkte (s16 x, y: ul, ur, lr, ll),
-    u8 Maske, u8 Flags, u16 Skalierung (boxes.cpp, „old“-Format).
-  * OC (Objektcode, Offsets ab Blockanfang): u16 Nummer @6, x/8 @9,
-    y/8 @10 (Bit 7: Elternzustand), Breite/8 @11, u16 Laufziel x @13 und
-    y @15, @17: Blickrichtung (Bits 0–2) und Höhe (Bits 3–7),
-    Namens-Offset @18 (object.cpp: ScummEngine_v4::resetRoomObject).
+Format (after ScummVM, engines/scumm: resource_v4.cpp, room.cpp, gfx.cpp):
+  * Files are XOR-encrypted with 0x69.
+  * Blocks: u32 size (incl. header, little-endian) + 2-character tag.
+    LE (file) → LF (room, followed by u16 room number) → RO → HD, PA, BM, …
+  * HD: u16 width, u16 height, u16 object count.
+  * PA: u16 byte count, followed by RGB triplets.
+  * BM: u32 length, followed by one u32 offset per 8 px strip (relative to the
+    data start) at which the strip begins with a codec byte.
+  * BX: u8 count, followed per box by 4 corners (s16 x, y: ul, ur, lr, ll),
+    u8 mask, u8 flags, u16 scale (boxes.cpp, “old” format).
+  * OC (object code, offsets from block start): u16 number @6, x/8 @9,
+    y/8 @10 (bit 7: parent state), width/8 @11, u16 walk target x @13 and
+    y @15, @17: facing direction (bits 0–2) and height (bits 3–7),
+    name offset @18 (object.cpp: ScummEngine_v4::resetRoomObject).
 
-Aufruf als Skript: listet Räume bzw. schreibt sie als PNG.
+Run as a script: lists rooms or writes them as PNG.
 """
 import argparse
 import struct
@@ -37,7 +37,7 @@ class ScummError(Exception):
 
 
 def blocks(data, start, end):
-    """Iteriert über (tag, datenanfang, blockende) zwischen start und end."""
+    """Iterates over (tag, data start, block end) between start and end."""
     off = start
     while off + 6 <= end:
         size, = struct.unpack_from("<I", data, off)
@@ -56,12 +56,12 @@ def find(data, start, end, tag):
 
 
 class Box:
-    """Begehbares Viereck; Ecken im Uhrzeigersinn ab oben links."""
+    """Walkable quadrilateral; corners clockwise from top left."""
 
     def __init__(self, corners, flags, scale=255):
         self.corners = corners  # [(x, y)] × 4: ul, ur, lr, ll
         self.flags = flags
-        self.scale = scale      # Figurengröße in dieser Box, 255 = volle Größe; 0x8000|n: Stufe n
+        self.scale = scale      # character size in this box, 255 = full size; 0x8000|n: slot n
 
     def bounds(self):
         xs = [x for x, _ in self.corners]
@@ -83,11 +83,11 @@ class Room:
         self.number = number
         self.width = width
         self.height = height
-        self.palette = palette  # Liste von (r, g, b), 0–255
-        self._bitmap = bitmap   # BM-Daten (ohne Blockkopf)
+        self.palette = palette  # list of (r, g, b), 0–255
+        self._bitmap = bitmap   # BM data (without block header)
         self.boxes = list(boxes)
         self.objects = list(objects)
-        self._object_images = object_images or {}  # Objektnummer → OI-Daten ab Streifentabelle
+        self._object_images = object_images or {}  # object number → OI data from the strip table on
 
     def _decode(self, bm, width, height):
         pixels = bytearray(width * height)
@@ -100,21 +100,21 @@ class Room:
         return img.convert("RGB")
 
     def object_image(self, number):
-        """Bild eines Raumobjekts (erster Zustand) in dessen Größe laut OC."""
+        """Image of a room object (first state) at its size according to OC."""
         obj = next((o for o in self.objects if o.number == number), None)
         if obj is None or number not in self._object_images:
             raise ScummError(f"Raum {self.number}: kein Bild für Objekt {number}")
         return self._decode(self._object_images[number], obj.width, obj.height)
 
     def image(self):
-        """Dekodiert den Hintergrund als RGB-Bild."""
+        """Decodes the background as an RGB image."""
         if len(self._bitmap) < 4 + 4 * (self.width // 8):
             raise ScummError(f"Raum {self.number} hat kein Hintergrundbild")
         return self._decode(self._bitmap, self.width, self.height)
 
 
 def read_rooms(game_dir):
-    """Alle Räume aus allen DISK*.LEC eines Spielverzeichnisses."""
+    """All rooms from all DISK*.LEC files of a game directory."""
     rooms = {}
     files = sorted(Path(game_dir).glob("DISK*.LEC"), key=lambda p: p.name.upper())
     if not files:
@@ -141,8 +141,8 @@ def read_rooms(game_dir):
                 room = Room(number, width, height, palette, data[bm[0]:bm[1]],
                             read_boxes(data, find(data, *ro, "BX")),
                             read_objects(data, ro), read_object_images(data, ro))
-                # Skalierungsstufen (SA, ScummVM: SCAL): 4 × (Größe1, y1, Größe2, y2);
-                # eine Box mit Skalierung 0x8000 | n nimmt Stufe n (Größe nach y)
+                # Scale slots (SA, ScummVM: SCAL): 4 × (size1, y1, size2, y2);
+                # a box with scale 0x8000 | n uses slot n (size depending on y)
                 sa = find(data, *ro, "SA")
                 raw = data[sa[0]:sa[0] + 32] if sa else bytes(32)
                 room.scale_slots = [struct.unpack_from("<4h", raw, 8 * i) for i in range(4)]
@@ -167,8 +167,8 @@ def read_boxes(data, bx):
 
 
 def read_object_images(data, ro):
-    """OI-Blöcke: u16 Objektnummer, danach Streifentabelle wie BM (object.cpp:
-    getObjectImage überspringt bei kleinen Headern 8 Bytes = Kopf + Nummer)."""
+    """OI blocks: u16 object number, followed by a strip table like BM (object.cpp:
+    getObjectImage skips 8 bytes = header + number for small headers)."""
     images = {}
     for tag, s, e in blocks(data, *ro):
         if tag == "OI" and e - s > 2:
@@ -182,7 +182,7 @@ def read_objects(data, ro):
     for tag, s, e in blocks(data, *ro):
         if tag != "OC":
             continue
-        b = s - 6  # Offsets in ScummVM zählen ab Blockanfang
+        b = s - 6  # offsets in ScummVM count from the block start
         number, = struct.unpack_from("<H", data, b + 6)
         walk_x, walk_y = struct.unpack_from("<HH", data, b + 13)
         name_at = b + data[b + 18]
@@ -196,26 +196,26 @@ def read_objects(data, ro):
 
 
 # --------------------------------------------------------------------------
-# Kostüme (Figuren): Index 000.LFL → CO-Blöcke, Renderer nach costume.cpp
+# Costumes (characters): index 000.LFL → CO blocks, renderer after costume.cpp
 # --------------------------------------------------------------------------
 #
-# Ein Kostüm besteht aus bis zu 16 Einzelteilen („Limbs“, z. B. Körper und
-# Kopf). Eine Animation (Nummer = Richtung + 4 × Aktion) setzt für jedes Limb
-# einen Bereich der Befehlsliste; jeder Befehl wählt ein Bild dieses Limbs.
-# Standardaktionen (actor.cpp): 1 Init, 2 Laufen, 3 Stehen, 4 Reden an,
-# 5 Reden aus. Richtungen: 0 links, 1 rechts, 2 vorne, 3 hinten.
+# A costume consists of up to 16 parts (“limbs”, e.g. body and
+# head). An animation (number = direction + 4 × action) sets a range of the
+# command list for each limb; each command selects an image of that limb.
+# Standard actions (actor.cpp): 1 init, 2 walk, 3 stand, 4 talk start,
+# 5 talk stop. Directions: 0 left, 1 right, 2 front, 3 back.
 
 INIT, WALK, STAND, TALK_START, TALK_STOP = 1, 2, 3, 4, 5
 LEFT, RIGHT, FRONT, BACK = 0, 1, 2, 3
 
 
 def read_costume(game_dir, number):
-    """CO-Block eines Kostüms über das Inhaltsverzeichnis 000.LFL.
+    """CO block of a costume via the index 000.LFL.
 
-    Die Offsets im Verzeichnis 0C zählen ab Raumblock (LF) + 8, also hinter
-    Blockkopf und Raumnummer; wo der Raumblock liegt, steht im FO-Block der
-    jeweiligen Diskdatei. Sequentielles Ablaufen geht nicht: Die SO-Blöcke
-    dieser Version tragen falsche Größen.
+    The offsets in directory 0C count from the room block (LF) + 8, i.e. after
+    block header and room number; where the room block lies is stated in the FO
+    block of the respective disk file. Walking the blocks sequentially does not
+    work: the SO blocks of this version carry wrong sizes.
     """
     game_dir = Path(game_dir)
     index = (game_dir / "000.LFL").read_bytes()
@@ -231,7 +231,7 @@ def read_costume(game_dir, number):
     room, offset = costumes[number]
     for path in sorted(game_dir.glob("DISK*.LEC"), key=lambda p: p.name.upper()):
         data = bytes(b ^ XOR_KEY for b in path.read_bytes())
-        for i in range(data[12]):  # FO-Block direkt nach dem LE-Kopf
+        for i in range(data[12]):  # FO block directly after the LE header
             r, lf = struct.unpack_from("<BI", data, 13 + i * 5)
             if r == room and data[lf + 4:lf + 6] == b"LF":
                 at = lf + 8 + offset
@@ -243,8 +243,8 @@ def read_costume(game_dir, number):
 
 
 def _resource_block(game_dir, directory, number, tag):
-    """Block einer Ressource über das Inhaltsverzeichnis 000.LFL (0C, 0N …).
-    Offsets zählen ab Raumblock + 8 (siehe read_costume)."""
+    """Block of a resource via the index 000.LFL (0C, 0N …).
+    Offsets count from the room block + 8 (see read_costume)."""
     game_dir = Path(game_dir)
     index = (game_dir / "000.LFL").read_bytes()
     entries = None
@@ -259,7 +259,7 @@ def _resource_block(game_dir, directory, number, tag):
     room, offset = entries[number]
     for path in sorted(game_dir.glob("DISK*.LEC"), key=lambda p: p.name.upper()):
         data = bytes(b ^ XOR_KEY for b in path.read_bytes())
-        for i in range(data[12]):  # FO-Block direkt nach dem LE-Kopf
+        for i in range(data[12]):  # FO block directly after the LE header
             r, lf = struct.unpack_from("<BI", data, 13 + i * 5)
             if r == room and data[lf + 4:lf + 6] == b"LF":
                 at = lf + 8 + offset
@@ -271,9 +271,9 @@ def _resource_block(game_dir, directory, number, tag):
 
 
 def read_sound(game_dir, number):
-    """Sound-Ressource: {"WA": PC-Speaker-Daten, "AD": AdLib-Daten} (je ohne
-    Blockkopf). MI1 verschachtelt SO-Blöcke; genommen wird jeweils der erste
-    WA- und AD-Block (sound.cpp: readSoundResource)."""
+    """Sound resource: {"WA": PC speaker data, "AD": AdLib data} (each without
+    block header). MI1 nests SO blocks; the first WA and AD block is taken
+    in each case (sound.cpp: readSoundResource)."""
     data = _resource_block(game_dir, "0N", number, "SO")
     found = {}
 
@@ -294,18 +294,18 @@ def read_sound(game_dir, number):
 
 
 def adlib_melody(ad, channel=None):
-    """AdLib-Musik (AD) → einstimmige Melodie als [(Hz, ms)], Schleifen-Flag
-    und gewählter MIDI-Kanal.
+    """AdLib music (AD) → monophonic melody as [(Hz, ms)], loop flag
+    and chosen MIDI channel.
 
-    Format nach sound.cpp (convertADResource): 2 Bytes, 0x80 = Musik, Ticks
-    (Tempo), play_once, …, 8 Instrumente à 16 Bytes, dann eine MIDI-Spur mit
-    480 Ticks pro Viertel und 500000·256/Ticks µs pro Viertel; die Spur
-    beginnt ohne Zeitangabe mit dem ersten Ereignis.
+    Format after sound.cpp (convertADResource): 2 bytes, 0x80 = music, ticks
+    (tempo), play_once, …, 8 instruments of 16 bytes each, then a MIDI track
+    with 480 ticks per quarter note and 500000·256/ticks µs per quarter; the
+    track starts with the first event without a delta time.
 
-    Der PC-Speaker ist einstimmig, also bleibt nur die Melodiestimme: der
-    Kanal mit der höchsten mittleren Tonlage, ohne Kanäle, die immer dieselbe
-    Tonhöhe spielen (Schlagzeug auf AdLib-Melodiekanälen). channel legt den
-    Kanal fest, falls die Automatik danebenliegt.
+    The PC speaker is monophonic, so only the melody voice remains: the
+    channel with the highest average pitch, excluding channels that always
+    play the same pitch (drums on AdLib melody channels). channel sets the
+    channel explicitly if the automatic choice is off.
     """
     if len(ad) < 0x13 + 128 or ad[2] != 0x80:
         raise ScummError("AD-Ressource ist keine Musik")
@@ -313,7 +313,7 @@ def adlib_melody(ad, channel=None):
     track = ad[2 + 0x11 + 128:]
     us_per_tick = 500000 * 256 / ticks / 480
 
-    events = []  # (tick, an?, kanal, note)
+    events = []  # (tick, on?, channel, note)
     pos = tick = 0
     status = 0
 
@@ -392,7 +392,7 @@ def adlib_melody(ad, channel=None):
             continue
         hz = 0 if note is None else round(440 * 2 ** ((note - 69) / 12))
         notes.append((hz, ms))
-    # Die Stille bis zum ersten Ton der Stimme gehört zum Stück (Auftakt).
+    # The silence up to the voice's first note belongs to the piece (anacrusis).
     first_tick = melody[0][0] if melody else 0
     if first_tick:
         notes.insert(0, (0, round(first_tick * us_per_tick / 1000)))
@@ -408,7 +408,7 @@ class Costume:
         if fmt not in (0x58, 0x59):
             raise ScummError(f"Kostüm {number}: Format {fmt:#x} nicht unterstützt")
         self.colors = 16 if fmt == 0x58 else 32
-        self.palette = data[8:8 + self.colors]  # Indizes in die Raumpalette
+        self.palette = data[8:8 + self.colors]  # indices into the room palette
         p = 8 + self.colors
         self.anim_cmds = struct.unpack_from("<H", data, p)[0]
         self.frame_offsets = p + 2
@@ -425,7 +425,7 @@ class Costume:
                 "noloop": [False] * 16, "stopped": 0}
 
     def apply(self, state, action, direction):
-        """costumeDecodeData: setzt die Limbs für Animation direction + 4·action."""
+        """costumeDecodeData: sets the limbs for animation direction + 4·action."""
         anim = direction + action * 4
         if anim > self.num_anims:
             return False
@@ -458,7 +458,7 @@ class Costume:
         return True
 
     def advance(self, state):
-        """increaseAnim für alle Limbs (Sound-Befehle 0x78/0x7C überspringen)."""
+        """increaseAnim for all limbs (skipping sound commands 0x78/0x7C)."""
         for limb in range(16):
             i = state["pos"][limb]
             if i == 0xFFFF:
@@ -475,8 +475,8 @@ class Costume:
             state["pos"][limb] = i
 
     def render(self, state, room_palette, size=(160, 160), origin=(80, 140)):
-        """Setzt die Limbs zu einem RGBA-Bild zusammen (Blick nach rechts).
-        origin ist der Fußpunkt des Actors im Bild."""
+        """Assembles the limbs into an RGBA image (facing right).
+        origin is the actor's foot point in the image."""
         img = Image.new("RGBA", size, (0, 0, 0, 0))
         px = img.load()
         shr, mask = (4, 15) if self.colors == 16 else (3, 7)
@@ -518,11 +518,11 @@ class Costume:
 
 
 # --------------------------------------------------------------------------
-# Streifen-Codecs (gfx.cpp: decompressBitmap und Verwandte)
+# Strip codecs (gfx.cpp: decompressBitmap and relatives)
 # --------------------------------------------------------------------------
 
 class BitReader:
-    """LSB-first Bitleser wie FILL_BITS/READ_BIT in ScummVM."""
+    """LSB-first bit reader like FILL_BITS/READ_BIT in ScummVM."""
 
     def __init__(self, data, pos):
         self.data = data
@@ -549,14 +549,14 @@ def decode_strip(bm, offset, pixels, x0, pitch, height):
     def put(x, y, c):
         pixels[y * pitch + x0 + x] = c & 0xFF
 
-    if code == 1:  # roh
+    if code == 1:  # raw
         for y in range(height):
             for x in range(8):
                 put(x, y, bm[src])
                 src += 1
-    elif 14 <= code <= 18 or 34 <= code <= 38:   # Zickzack vertikal (+transparent)
+    elif 14 <= code <= 18 or 34 <= code <= 38:   # zigzag vertical (+transparent)
         _basic(bm, src, shift, height, lambda i: (i // height, i % height), put)
-    elif 24 <= code <= 28 or 44 <= code <= 48:   # Zickzack horizontal (+transparent)
+    elif 24 <= code <= 28 or 44 <= code <= 48:   # zigzag horizontal (+transparent)
         _basic(bm, src, shift, height, lambda i: (i % 8, i // 8), put)
     elif 64 <= code <= 68 or 84 <= code <= 88 or 104 <= code <= 108 or 124 <= code <= 128:
         _majmin(bm, src, shift, height, put)
@@ -565,7 +565,7 @@ def decode_strip(bm, offset, pixels, x0, pitch, height):
 
 
 def _basic(bm, src, shift, height, pos, put):
-    """drawStripBasicV/H: 1 Bit „gleich“, 2 Bit „neue Farbe“, 3/4 Bit ±1."""
+    """drawStripBasicV/H: 1 bit “same”, 2 bits “new colour”, 3/4 bits ±1."""
     color = bm[src]
     r = BitReader(bm, src + 1)
     inc = -1
@@ -585,7 +585,7 @@ def _basic(bm, src, shift, height, pos, put):
 
 
 def _majmin(bm, src, shift, height, put):
-    """MajMinCodec::decodeLine, zeilenweise über 8 Pixel."""
+    """MajMinCodec::decodeLine, row by row over 8 pixels."""
     color = bm[src]
     r = BitReader(bm, src + 1)
     repeat = 0

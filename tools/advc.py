@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""advc – Adventure-Compiler für Pocket Adventure FX.
+"""advc – adventure compiler for Pocket Adventure FX.
 
-Übersetzt die Spielbeschreibung (game/*.adv) samt Grafiken und Musik in
-  * einen Datenblock game.bin, der als einzige Ressource in den FX-Flash geht,
-  * gamedata.h mit Record-Structs, Opcodes, IDs und einer Build-ID.
+Translates the scene description (game/*.adv) together with graphics and music into
+  * a data block game.bin, which goes into the FX flash as the only resource,
+  * gamedata.h with record structs, opcodes, IDs and a build ID.
 
-Beide Dateien entstehen im selben Lauf aus denselben Record-Definitionen
-(RECORDS unten). Dadurch können Engine und Daten strukturell nicht
-auseinanderlaufen; eine veraltete FX-Datei erkennt die Engine an der Build-ID.
+Both files are produced in the same run from the same record definitions
+(RECORDS below). This way engine and data cannot drift apart structurally;
+the engine detects an outdated FX file by its build ID.
 
-Byte-Reihenfolge: little-endian wie der AVR, damit die Engine Records mit
-FX::readDataObject() direkt in ihre Structs lesen kann. Einzige Ausnahme sind
-Bild-Header (Breite/Höhe big-endian), deren Format FX::drawBitmap() vorgibt.
+Byte order: little-endian like the AVR, so the engine can read records with
+FX::readDataObject() directly into its structs. The only exception are
+image headers (width/height big-endian), whose format FX::drawBitmap() dictates.
 
-Sprache der .adv-Datei: siehe README.md, Abschnitt „Skriptsprache“.
+Language of the .adv file: see README.md, section "Script language".
 """
 import argparse
 import hashlib
@@ -32,26 +32,26 @@ from textsource import REF, TextError, TextSource, wrap
 NONE8 = 0xFF
 NONE24 = 0xFFFFFF
 
-# Textbox: 21 Zeichen à 6 px = 126 px plus 1 px Rand je Seite = 128 px.
+# Text box: 21 characters at 6 px = 126 px plus 1 px edge per side = 128 px.
 TEXT_COLS = 21
 TEXT_ROWS = 4
-OPTION_COLS = 19   # plus Auswahlzeichen links und Pfeilspalte rechts
-# Größenstufen für Figuren mit Tiefe (actor … depth), als Anteil der vollen Größe
+OPTION_COLS = 19   # plus selection mark on the left and arrow column on the right
+# Size levels for characters with depth (actor … depth), as a fraction of full size
 DEPTH_LEVELS = [1.0, 0.82, 0.66, 0.52, 0.4, 0.3, 0.21, 0.13]
-MAX_OPTIONS = 16  # höchstens gleichzeitig sichtbare Optionen (RAM der Engine: so viele wie nötig)
-CHOICE_ROWS = 4   # sichtbare Zeilen der Optionsliste (weniger, wenn der volle Text der gewählten mehr Platz braucht)
-# Display: 8 Textzeilen. Unten die Optionsliste (eine Zeile je Option), oben
-# der volle Text der gewählten Option, falls er umbricht.
+MAX_OPTIONS = 16  # max. options visible at once (engine RAM: as many as needed)
+CHOICE_ROWS = 4   # visible rows of the option list (fewer if the full text of the selected one needs more room)
+# Display: 8 text rows. At the bottom the option list (one row per option), at the top
+# the full text of the selected option, if it wraps.
 SCREEN_ROWS = 8
 MAX_INVENTORY = 16
 
 DIRS = {"right": 0, "left": 1, "front": 2}
 
-# Texte der Engine selbst je Sprache (keine Spieltexte, die kommen aus der
-# Originalkopie), Zeichensatz CP437. sound_on/sound_off/empty/grey_on/
-# grey_off: höchstens 21 Zeichen (eine Zeile; grey_* ist die Menüzeile zum
-# Umschalten zwischen Graustufen und Schwarz-Weiß). Mit „ui.<schlüssel>“ in say verwendbar, z. B. für
-# Ausgänge zu Räumen, die diese Fassung nicht enthält.
+# The engine's own texts per language (no game texts, those come from the
+# copy of the game), character set CP437. sound_on/sound_off/empty/grey_on/
+# grey_off: at most 21 characters (one line; grey_* is the menu line for
+# switching between greyscale and black and white). Usable in say as "ui.<key>", e.g. for
+# exits to rooms that this version doesn't contain.
 UI_TEXT = {
     "en": {"sound_on": "A:Start  B:Sound on", "sound_off": "A:Start  B:Sound off", "empty": "(empty)",
            "not_included": "Not included in this version.",
@@ -71,19 +71,19 @@ UI_TEXT = {
 }
 UI_REF = re.compile(r"ui\.(\w+)")
 
-# Timer3 läuft mit F_CPU/8 = 2 MHz im CTC-Modus und toggelt den Pin bei jedem
-# Compare-Match: f = 2 MHz / (2 * (OCR + 1)).
+# Timer3 runs at F_CPU/8 = 2 MHz in CTC mode and toggles the pin on every
+# compare match: f = 2 MHz / (2 * (OCR + 1)).
 TIMER3_HALF_CLOCK = 1_000_000
 
 # --------------------------------------------------------------------------
-# Record-Definitionen: einzige Quelle für Packen (Python) und Structs (C++)
+# Record definitions: single source for packing (Python) and structs (C++)
 # --------------------------------------------------------------------------
 
 RECORDS = {
-    # Am Anfang von game.bin: je enthaltene Sprache ein LangEntry mit ihrem
-    # Namen (für die Sprachauswahl) und ihrem GameHeader. Bilder, Musik und
-    # Laufwege teilen sich die Sprachen; Texte, Verben, Objekte und Skripte
-    # hat jede für sich.
+    # At the start of game.bin: one LangEntry per included language with its
+    # name (for the language selection) and its GameHeader. Images, music and
+    # walk paths are shared between the languages; texts, verbs, objects and scripts
+    # each language has on its own.
     "LangDir": [("magic", "u16"), ("buildId", "u16"), ("count", "u8")],
     "LangEntry": [("name", "u24"), ("header", "u24")],
     "GameHeader": [
@@ -93,57 +93,57 @@ RECORDS = {
         ("roomCount", "u8"), ("rooms", "u24"),
         ("musicCount", "u8"), ("music", "u24"),
         ("startScript", "u24"), ("cursor", "u24"),
-        # titleGrey: dasselbe Bild in Graustufen (3 Ebenen als Frames), NONE24 = keins
+        # titleGrey: the same image in greyscale (3 planes as frames), NONE24 = none
         ("title", "u24"), ("titleGrey", "u24"), ("titleMusic", "u8"),
-        # Verb für Inventar-Klicks mit „walk“ (z. B. look), sonst NONE8
+        # Verb for inventory clicks with "walk" (e.g. look), otherwise NONE8
         ("inventoryVerb", "u8"),
-        # Texte der Engine selbst (nicht aus dem Spiel): Titelzeile, leeres
-        # Inventar, Menüzeile Graustufen an/aus
+        # The engine's own texts (not from the game): title line, empty
+        # inventory, menu line greyscale on/off
         ("uiSoundOn", "u24"), ("uiSoundOff", "u24"), ("uiEmpty", "u24"),
         ("uiGreyOn", "u24"), ("uiGreyOff", "u24"),
     ],
-    # prep: Verbindungswort für Zwei-Objekt-Sätze („mit“, „an“), sonst NONE24
+    # prep: connecting word for two-object sentences ("with", "on"), otherwise NONE24
     "VerbRec": [("name", "u24"), ("prep", "u24"), ("fallback", "u24")],
-    # verbs zeigt auf eine Liste von VerbEntry, beendet mit verb == NONE8
+    # verbs points to a list of VerbEntry, terminated with verb == NONE8
     "ObjectRec": [("name", "u24"), ("verbs", "u24")],
     "VerbEntry": [("verb", "u8"), ("other", "u8"), ("script", "u24")],
-    # object: Objekt, für das die Figur selbst der Hotspot ist (NONE8 = keins);
-    # der Hotspot wandert dann mit der Figur.
-    # grey: dieselben Frames in Graustufen (3 Ebenen je Frame), NONE24 = keins
+    # object: object for which the character itself is the hotspot (NONE8 = none);
+    # the hotspot then moves along with the character.
+    # grey: the same frames in greyscale (3 planes per frame), NONE24 = none
     "ActorRec": [
         ("sprite", "u24"), ("grey", "u24"),
         ("stand", "u8"), ("walkFirst", "u8"), ("walkCount", "u8"),
         ("talk", "u8"), ("front", "u8"), ("frontTalk", "u8"),
         ("object", "u8"),
-        # depth: Größenstufen für Räume mit Tiefe (NONE24 = immer gleich groß);
-        # Tabelle: u8 Anzahl, je Stufe u8 Mindestgröße (0–255) + u24 Sprite
-        # + u24 Sprite in Graustufen (NONE24 = keins)
+        # depth: size levels for rooms with depth (NONE24 = always the same size);
+        # table: u8 count, per level u8 minimum size (0–255) + u24 sprite
+        # + u24 sprite in greyscale (NONE24 = none)
         ("depth", "u24"),
     ],
-    # matrix: boxCount × boxCount Bytes, Eintrag [von][nach] = nächste Box auf
-    # dem kürzesten Weg (NONE8 = unerreichbar), vom Compiler vorberechnet.
-    # grey: Hintergrund in Graustufen, je Ebene ein Frame (NONE24 = nur 1 Bit)
+    # matrix: boxCount × boxCount bytes, entry [from][to] = next box on
+    # the shortest path (NONE8 = unreachable), precomputed by the compiler.
+    # grey: background in greyscale, one frame per plane (NONE24 = 1 bit only)
     "RoomRec": [
         ("background", "u24"), ("grey", "u24"), ("width", "u16"), ("height", "u8"),
         ("boxCount", "u8"), ("boxes", "u24"), ("matrix", "u24"),
         ("placeCount", "u8"), ("places", "u24"),
         ("entry", "u24"),
     ],
-    # Begehbares Viereck wie in SCUMM: Ecken oben links, oben rechts, unten
-    # rechts, unten links. Darf zu einer Linie oder einem Punkt entarten.
+    # Walkable quadrilateral as in SCUMM: corners top left, top right, bottom
+    # right, bottom left. May degenerate into a line or a point.
     "BoxRec": [
         ("ulx", "u16"), ("uly", "u8"), ("urx", "u16"), ("ury", "u8"),
         ("lrx", "u16"), ("lry", "u8"), ("llx", "u16"), ("lly", "u8"),
-        # Figurengröße (255 = voll) an der oberen und unteren Kante; dazwischen
-        # linear nach y – wie die Skalierungsstufen des Originals (SA-Block)
+        # Character size (255 = full) at the top and bottom edge; in between
+        # linear in y – like the original's scaling levels (SA block)
         ("scaleTop", "u8"), ("scaleBottom", "u8"),
     ],
-    # Ein Objekt an einer Stelle im Raum. image == NONE24: nur Hotspot.
-    # grey: Bild in Graustufen (Ausschnitt der Kulisse: Türen, Gegenstände),
-    # Frame f des 1-Bit-Bilds liegt dort als Frames 3f..3f+2 (je Ebene einer);
-    # NONE24: das 1-Bit-Bild gilt für alle Ebenen (Figuren als Dekoration).
-    # backdrop: 1, wenn Zustand 0 genau die Kulisse zeigt (eine geschlossene
-    # Tür) – dann zeichnet die Engine nichts.
+    # An object at a position in the room. image == NONE24: hotspot only.
+    # grey: image in greyscale (cutout of the background: doors, items),
+    # frame f of the 1-bit image is stored there as frames 3f..3f+2 (one per plane);
+    # NONE24: the 1-bit image applies to all planes (characters as decor).
+    # backdrop: 1 if state 0 shows exactly the background (a closed
+    # door) – then the engine draws nothing.
     "PlaceRec": [
         ("object", "u8"), ("x", "u16"), ("y", "u8"), ("w", "u8"), ("h", "u8"),
         ("walkX", "u16"), ("walkY", "u8"), ("face", "u8"),
@@ -161,60 +161,60 @@ def record_size(name):
     return sum(SIZES[t] for _, t in RECORDS[name])
 
 
-# Opcodes: (Name, Operanden). Operandtypen wie oben, 'addr' = u24-Sprungziel.
+# Opcodes: (name, operands). Operand types as above, 'addr' = u24 jump target.
 OPCODES = [
     ("END", []),
-    ("SAY", ["u8", "u24"]),          # actor|NONE8=Erzähler, string
-    ("WALK", ["u8", "u16", "u8"]),   # actor, x, y – blockiert bis Ankunft
-    ("PUT", ["u8", "u16", "u8"]),    # actor, x, y – setzt ihn in den aktuellen Raum
+    ("SAY", ["u8", "u24"]),          # actor|NONE8=narrator, string
+    ("WALK", ["u8", "u16", "u8"]),   # actor, x, y – blocks until arrival
+    ("PUT", ["u8", "u16", "u8"]),    # actor, x, y – puts him into the current room
     ("FACE", ["u8", "u8"]),          # actor, dir
     ("SET", ["u8"]),                 # flag
     ("CLEAR", ["u8"]),               # flag
-    ("JUNLESS", ["u8", "u8", "u24"]),  # cond-kind, index, ziel: springt, wenn Bedingung FALSCH
+    ("JUNLESS", ["u8", "u8", "u24"]),  # cond-kind, index, target: jumps if condition is FALSE
     ("JMP", ["u24"]),
-    ("PICKUP", ["u8"]),              # object → Inventar
-    ("LOSE", ["u8"]),                # object aus dem Inventar entfernen (verbraucht)
-    ("STATE", ["u8", "u8"]),         # object, zustand (Bild-Framegruppe)
+    ("PICKUP", ["u8"]),              # object → inventory
+    ("LOSE", ["u8"]),                # remove object from the inventory (used up)
+    ("STATE", ["u8", "u8"]),         # object, state (image frame group)
     ("HIDE", ["u8"]),
     ("SHOW", ["u8"]),
     ("MUSIC", ["u8"]),               # track|NONE8=stop
     ("WAIT", ["u8"]),                # frames
-    ("CHOICES", []),                 # neue Dialogauswahl beginnen
-    ("OPTION", ["u24", "u24"]),      # text, ziel: Option anbieten (davor ggf. Bedingungscode)
-    ("ASK", []),                     # Auswahl zeigen und warten; ohne Optionen weiter
-    ("ROOM", ["u8", "u16", "u8", "u8"]),  # raum, x|0xFFFF, y, dir: laden, Spielfigur setzen, entry aufrufen
-    ("CARD", ["u24", "u24", "u8"]),  # Vollbild, dasselbe in Graustufen|NONE24, Musik|NONE8: bis die Musik endet (ohne: 3 s) oder A
-    ("WAITR", ["u16", "u16"]),       # zufällig min … max Frames warten
-    ("JUNLESSPOS", ["u8", "u8", "u16", "u24"]),  # POS_Y|POS_GT|COND_NOT, actor, wert, ziel: springt, wenn der Vergleich nicht gilt
-    ("START", ["u24"]),              # Hintergrundablauf starten (ersetzt einen laufenden)
-    ("STOP", ["u24"]),               # diesen Hintergrundablauf beenden
-    ("RANDOM", ["u8"]),              # n, dann n × u24 Ziele: springt zu einem davon (gleichverteilt)
-    ("SETSTR", ["u8", "u24"]),       # platz, text: String-Variable setzen
-    ("SETCHAR", ["u8", "u8", "u8"]), # platz, stelle, zeichen ('@' wird nicht gezeigt)
-    ("LET", ["u8", "u8"]),           # variable, wert
-    ("FLASH", ["u8"]),               # frames: Bild blinkt invertiert (wartet)
-    ("PAN", ["u16"]),                # Kamera zu x schwenken (wartet), bis die Spielfigur wieder gesetzt wird
-    ("COSTUME", ["u8", "u8"]),       # actor, wie-actor: mit dessen Grafik zeigen
-    ("PLAY", ["u24"]),               # Zwischensequenz als Vordergrundskript starten (aus einem Ablauf)
-    ("CALL", ["u24"]),               # Unterprogramm (sub) aufrufen
-    ("LETR", ["u8", "u8", "u8"]),    # variable, min, max: Zufallswert
-    ("SETCHARV", ["u8", "u8", "u8"]),  # platz, stelle, variable: Zeichen aus einer Variablen
-    ("ADD", ["u8", "u8"]),           # variable, summand (Zweierkomplement, Ergebnis mod 256)
-    ("JUNLESSV", ["u8", "u8", "u8", "u24"]),  # VAR_*|COND_NOT, variable, wert, ziel
-    ("REMOVE", ["u8"]),              # actor aus dem Raum nehmen (z. B. hinter einer Tür)
-    ("HALT", ["u8"]),                # actor bleibt stehen, wo er gerade ist
+    ("CHOICES", []),                 # begin a new dialogue choice
+    ("OPTION", ["u24", "u24"]),      # text, target: offer option (preceded by condition code if needed)
+    ("ASK", []),                     # show choice and wait; continue if there are no options
+    ("ROOM", ["u8", "u16", "u8", "u8"]),  # room, x|0xFFFF, y, dir: load, place player character, call entry
+    ("CARD", ["u24", "u24", "u8"]),  # full screen, same in greyscale|NONE24, music|NONE8: until the music ends (without: 3 s) or A
+    ("WAITR", ["u16", "u16"]),       # wait a random min … max frames
+    ("JUNLESSPOS", ["u8", "u8", "u16", "u24"]),  # POS_Y|POS_GT|COND_NOT, actor, value, target: jumps if the comparison fails
+    ("START", ["u24"]),              # start background routine (replaces a running one)
+    ("STOP", ["u24"]),               # end this background routine
+    ("RANDOM", ["u8"]),              # n, then n × u24 targets: jumps to one of them (uniformly distributed)
+    ("SETSTR", ["u8", "u24"]),       # slot, text: set string variable
+    ("SETCHAR", ["u8", "u8", "u8"]), # slot, position, char ('@' is not shown)
+    ("LET", ["u8", "u8"]),           # variable, value
+    ("FLASH", ["u8"]),               # frames: image flashes inverted (waits)
+    ("PAN", ["u16"]),                # pan camera to x (waits), until the player character is placed again
+    ("COSTUME", ["u8", "u8"]),       # actor, as-actor: show with the latter's graphics
+    ("PLAY", ["u24"]),               # start cutscene as foreground script (from a background routine)
+    ("CALL", ["u24"]),               # call subroutine (sub)
+    ("LETR", ["u8", "u8", "u8"]),    # variable, min, max: random value
+    ("SETCHARV", ["u8", "u8", "u8"]),  # slot, position, variable: character from a variable
+    ("ADD", ["u8", "u8"]),           # variable, addend (two's complement, result mod 256)
+    ("JUNLESSV", ["u8", "u8", "u8", "u24"]),  # VAR_*|COND_NOT, variable, value, target
+    ("REMOVE", ["u8"]),              # remove actor from the room (e.g. behind a door)
+    ("HALT", ["u8"]),                # actor stops where he currently is
 ]
 OP = {name: i for i, (name, _) in enumerate(OPCODES)}
 
-# Bedingungsarten für JUNLESS und Dialogoptionen
+# Condition kinds for JUNLESS and dialogue options
 COND_FLAG = 0x00
 COND_HAS = 0x01
 COND_OPEN = 0x02
-COND_HOVER = 0x03     # Mauszeiger liegt auf dem Objekt
-POS_Y, POS_GT = 0x01, 0x02   # JUNLESSPOS: y statt x, > statt <
-VERB_ANY = 0xFE      # VerbEntry.verb für „on other“ (alle übrigen Verben außer Gehe zu)
-VAR_CMP = {"=": 0x00, "<": 0x01, ">": 0x02}   # Vergleich in JUNLESSV
-WALK_DIRECT = 0xFFFF  # PlaceRec.walkX: Skript startet sofort (place … direct)
+COND_HOVER = 0x03     # mouse pointer is over the object
+POS_Y, POS_GT = 0x01, 0x02   # JUNLESSPOS: y instead of x, > instead of <
+VERB_ANY = 0xFE      # VerbEntry.verb for "on other" (all remaining verbs except walk to)
+VAR_CMP = {"=": 0x00, "<": 0x01, ">": 0x02}   # comparison in JUNLESSV
+WALK_DIRECT = 0xFFFF  # PlaceRec.walkX: script starts immediately (place … direct)
 COND_NOT = 0x80
 
 
@@ -224,7 +224,7 @@ class CompileError(Exception):
 
 
 # --------------------------------------------------------------------------
-# Binär-Ausgabe mit Labels und Fixups
+# Binary output with labels and fixups
 # --------------------------------------------------------------------------
 
 class Blob:
@@ -268,11 +268,11 @@ class Blob:
 
 
 # --------------------------------------------------------------------------
-# Bilder im FX-Format (identisch zu fxdata-build.py)
+# Images in FX format (identical to fxdata-build.py)
 # --------------------------------------------------------------------------
 
 def encode_image(path, mask=False):
-    """Kodiert ein PNG; Framegröße aus dem Dateinamen: name_WxH.png."""
+    """Encodes a PNG; frame size from the file name: name_WxH.png."""
     m = re.search(r"_(\d+)x(\d+)$", path.stem)
     img = Image.open(path).convert("RGBA")
     frame = (int(m.group(1)), int(m.group(2))) if m else None
@@ -280,10 +280,10 @@ def encode_image(path, mask=False):
 
 
 def encode_pil(img, name, frame=None, mask=False):
-    """Kodiert ein Bild wie fxdata-build.py: Header (w, h big-endian), danach
-    je Frame spaltenweise Bytes pro 8-Pixel-Zeile; bei Transparenz folgt jedem
-    Byte sein Maskenbyte. mask=True erzwingt die Maske auch bei deckenden
-    Bildern – für alles, was die Engine mit dbmMasked zeichnet."""
+    """Encodes an image like fxdata-build.py: header (w, h big-endian), then
+    per frame column-wise bytes per 8-pixel row; with transparency each byte is
+    followed by its mask byte. mask=True forces the mask even for opaque
+    images – for everything the engine draws with dbmMasked."""
     img = img.convert("RGBA")
     fw, fh = frame or img.size
     if img.width % fw or img.height % fh:
@@ -312,7 +312,7 @@ def encode_pil(img, name, frame=None, mask=False):
 
 
 # --------------------------------------------------------------------------
-# Musik
+# Music
 # --------------------------------------------------------------------------
 
 def parse_inline_notes(spec):
@@ -327,9 +327,9 @@ def parse_inline_notes(spec):
 
 
 def encode_track(notes):
-    """Frequenz/Dauer → (Timer3-OCR, ms ≤ 255). Lange Noten werden geteilt;
-    der Player setzt bei gleichem OCR den Zähler nicht zurück, es entsteht
-    also keine hörbare Naht."""
+    """Frequency/duration → (Timer3 OCR, ms ≤ 255). Long notes are split;
+    the player doesn't reset the counter for the same OCR, so no audible
+    seam occurs."""
     out = []
     for hz, ms in notes:
         if hz < 0 or ms <= 0:
@@ -345,7 +345,7 @@ def encode_track(notes):
 
 
 # --------------------------------------------------------------------------
-# Laufflächen: Nachbarschaft und Wegfindungsmatrix
+# Walk boxes: adjacency and pathfinding matrix
 # --------------------------------------------------------------------------
 
 def _seg_point_dist(a, b, p):
@@ -368,13 +368,13 @@ def _segments_intersect(a, b, c, d):
 
 
 def _inside(quad, p):
-    """Punkt im (konvexen) Viereck; entartete Vierecke haben kein Inneres."""
+    """Point in the (convex) quadrilateral; degenerate quadrilaterals have no interior."""
     signs = [_cross(quad[i], quad[(i + 1) % 4], p) for i in range(4) if quad[i] != quad[(i + 1) % 4]]
     return len(signs) >= 3 and (all(s >= 0 for s in signs) or all(s <= 0 for s in signs))
 
 
 def box_distance(q1, q2):
-    """Kleinster Abstand zweier Laufflächen (0 bei Berührung/Überlappung)."""
+    """Smallest distance between two walk boxes (0 when touching/overlapping)."""
     edges1 = [(q1[i], q1[(i + 1) % 4]) for i in range(4)]
     edges2 = [(q2[i], q2[(i + 1) % 4]) for i in range(4)]
     if any(_segments_intersect(a, b, c, d) for a, b in edges1 for c, d in edges2):
@@ -385,14 +385,14 @@ def box_distance(q1, q2):
                min(_seg_point_dist(a, b, p) for a, b in edges1 for p in q2))
 
 
-# Laufflächen, die sich bis auf diesen Abstand nähern, gelten als verbunden.
-# Ecken, die im Original aufeinanderliegen, haben Abstand 0; die Toleranz
-# fängt nur Rundungen in handgeschriebenen Räumen ab.
+# Walk boxes that come within this distance of each other count as connected.
+# Corners that coincide in the original have distance 0; the tolerance
+# only catches rounding in hand-written rooms.
 BOX_TOUCH = 0.6
 
 
 def box_matrix(quads):
-    """Nächste-Box-Matrix per Breitensuche: m[von][nach] = erster Schritt."""
+    """Next-box matrix via breadth-first search: m[from][to] = first step."""
     n = len(quads)
     adjacent = [[i != j and box_distance(quads[i], quads[j]) <= BOX_TOUCH for j in range(n)]
                 for i in range(n)]
@@ -429,9 +429,9 @@ class Line:
 
 
 def strip_comment(raw):
-    """Schneidet einen Kommentar ab. '#' beginnt ihn nur am Wortanfang und
-    außerhalb von Anführungszeichen – in Textverweisen wie r38.s203#1 ist es
-    Teil des Worts."""
+    """Cuts off a comment. '#' only starts one at the beginning of a word and
+    outside of quotes – in text references like r38.s203#1 it is
+    part of the word."""
     quote = None
     for i, c in enumerate(raw):
         if quote:
@@ -459,9 +459,9 @@ def tokenize(text):
 
 
 def with_lead_in(melody, lead):
-    """Setzt die Melodie erst nach einer Pause ein (wie die Kapitelkarte), spielt
-    bis dahin die Noten einer Begleitstimme – der Lautsprecher ist einstimmig,
-    im Original laufen die Stimmen nebeneinander. Länge und Takt bleiben."""
+    """Starts the melody only after a pause (like the chapter card), plays
+    the notes of an accompanying voice until then – the speaker is monophonic,
+    in the original the voices run side by side. Length and tempo stay the same."""
     rest = 0
     while rest < len(melody) and melody[rest][0] == 0:
         rest += 1
@@ -479,8 +479,8 @@ def with_lead_in(melody, lead):
 
 
 def box_scale(box, slots):
-    """Figurengröße (1–255) an oberer und unterer Kante einer Original-Box:
-    fest, oder bei 0x8000 | n nach Stufe n linear über y (ScummVM getScale)."""
+    """Character size (1–255) at the top and bottom edge of an original box:
+    fixed, or with 0x8000 | n linear in y according to level n (ScummVM getScale)."""
     ys = [y for _, y in box.corners]
     if not box.scale & 0x8000:
         v = max(1, min(255, box.scale))
@@ -503,30 +503,30 @@ class Game:
         self.rooms = {}
         self.music = {}
         self.flags = {}
-        self.vars = {}       # Zahlenvariablen (0…255): Name → Nummer
+        self.vars = {}       # numeric variables (0…255): name → number
         self.defaults = {}   # verb id → script AST
         self.start_room = None
         self.cursor = None
         self.title = None
-        self.title_source = None  # Ausschnitt des Originals für die Graustufen
+        self.title_source = None  # cutout of the original for the greyscale
         self.title_music = None
         self.cards = {}      # id → {"room", "threshold", "music", "line"}
-        # Graustufen je Bild: ("room", id) | ("card", id) | ("title", None)
+        # greyscale per image: ("room", id) | ("card", id) | ("title", None)
         # → {"layers", "subjects", "line"} (original.to_grey)
         self.greyscale = {}
-        self.routines = {}   # id → (Zeile, AST): Hintergrundabläufe
-        self.cutscenes = {}  # id → (Zeile, AST): Szenen, die ein Ablauf mit play startet
-        self.subs = {}       # id → (Zeile, AST): Unterprogramme (call)
-        self.numbers = {}    # Variable → Nummer im Original (Code 4 in Texten)
-        self.strings = {}    # id → {"original": Nummer, "slot", "line"}: String-Variablen
-        self.string_refs = {}  # id → Textverweise aus setstring (für die Länge)
+        self.routines = {}   # id → (line, AST): background routines
+        self.cutscenes = {}  # id → (line, AST): scenes a background routine starts with play
+        self.subs = {}       # id → (line, AST): subroutines (call)
+        self.numbers = {}    # variable → number in the original (code 4 in texts)
+        self.strings = {}    # id → {"original": number, "slot", "line"}: string variables
+        self.string_refs = {}  # id → text references from setstring (for the length)
         self.inventory_verb = None
-        self.original_dir = None   # Grafiken, Laufwege, Musik: aus der ersten Kopie
-        self.languages = []        # TextSource je angegebener Kopie (Sprachfassung)
+        self.original_dir = None   # graphics, walk paths, music: from the first copy
+        self.languages = []        # TextSource per given copy (language version)
         self._original_rooms = None
 
     def original_room(self, number, ln):
-        """Raum aus den Originaldaten (einmal geladen, dann gecacht)."""
+        """Room from the original data (loaded once, then cached)."""
         if self.original_dir is None:
             raise ln.err("braucht die Originaldaten: advc.py --original <Verzeichnis> "
                          "(im Makefile: make ORIGINAL=<Verzeichnis>)")
@@ -541,8 +541,8 @@ class Game:
         return self._original_rooms[number]
 
     def original_room_of(self, game_dir, number, ln):
-        """Raum aus einer bestimmten Kopie (Bilder, die je Sprache verschieden
-        sind, z. B. Kapitelkarten mit eingezeichnetem Text)."""
+        """Room from a specific copy (images that differ per language,
+        e.g. chapter cards with drawn-in text)."""
         import scumm_v4
         cache = self.__dict__.setdefault("_rooms_by_dir", {})
         if game_dir not in cache:
@@ -555,7 +555,7 @@ class Game:
         return cache[game_dir][number]
 
     def original_costume(self, number, ln):
-        self.original_room(1, ln)  # prüft Verzeichnis und lädt die Räume
+        self.original_room(1, ln)  # checks the directory and loads the rooms
         import scumm_v4
         try:
             return scumm_v4.read_costume(self.original_dir, number)
@@ -576,7 +576,7 @@ class Parser:
         self.i += 1
         return line
 
-    # ---- Top-Level ------------------------------------------------------
+    # ---- Top level ------------------------------------------------------
 
     def parse(self):
         while (ln := self.next()) is not None:
@@ -626,14 +626,14 @@ class Parser:
         self.g.music[mid] = {"notes": encode_track(notes), "loop": loop, "index": len(self.g.music)}
 
     def original_music(self, ln, args):
-        """Musik aus einer Original-Soundressource: die Melodiestimme der
-        AdLib-Fassung (die PC-Speaker-Fassung ist bei den Raummusiken nur ein
-        Platzhalter). Schleife wie im Original."""
+        """Music from an original sound resource: the melody voice of the
+        AdLib version (the PC speaker version is only a placeholder for the
+        room music). Loops as in the original."""
         import scumm_v4
         mid = self.new_id(self.g.music, ln, args[0], "Musik")
         number = self.num(ln, args[2])
         opts = self.keyvals(ln, args[3:], {"channel": 1, "start": 1, "lead": 1})
-        self.g.original_room(1, ln)  # prüft das Originalverzeichnis
+        self.g.original_room(1, ln)  # checks the original directory
         try:
             sound = scumm_v4.read_sound(self.g.original_dir, number)
             if "AD" not in sound:
@@ -644,8 +644,8 @@ class Parser:
                 notes = with_lead_in(notes, lead)
         except scumm_v4.ScummError as e:
             raise ln.err(f"Originaldaten: {e}")
-        # start <ms>: Vorlauf überspringen (z. B. den langen Klangteppich vor
-        # dem Titelthema, den ein einstimmiger Lautsprecher nicht wiedergibt).
+        # start <ms>: skip the intro (e.g. the long sound carpet before
+        # the title theme, which a monophonic speaker can't reproduce).
         skip = opts.get("start", [0])[0]
         while notes and skip > 0:
             hz, ms = notes[0]
@@ -661,14 +661,14 @@ class Parser:
 
     def top_actor(self, ln, args):
         # actor <id> sprite "<png>" stand N walk A B talk N front N fronttalk N
-        # actor <id> costume <nr> [scale S] [palette RAUM] [dark D] [outline O]
+        # actor <id> costume <nr> [scale S] [palette ROOM] [dark D] [outline O]
         # actor <id> invisible
-        args = args[:1] + [None] + args[1:]   # Platz des früheren Namens: Indizes bleiben
+        args = args[:1] + [None] + args[1:]   # slot of the former name: indices stay the same
         if len(args) >= 4 and args[2] == "costume":
             self.costume_actor(ln, args)
             return
         if len(args) == 3 and args[2] == "invisible":
-            # Sprecher ohne eigene Figur, z. B. Leute, die Teil der Kulisse sind
+            # speaker without a character of their own, e.g. people who are part of the background
             aid = self.new_id(self.g.actors, ln, args[0], "Actor")
             self.g.actors[aid] = {
                 "sprite": ("pil", "invisible", Image.new("RGBA", (1, 1), (0, 0, 0, 0))),
@@ -692,16 +692,16 @@ class Parser:
         }
 
     def costume_options(self, ln, toks):
-        # Standardrand 2 px: Mit 1 px gehen Figuren in hellen, detailreichen
-        # Räumen wie der Küche im Raster der Kulisse unter.
+        # Default outline 2 px: with 1 px, characters get lost in bright, detailed
+        # rooms like the kitchen in the dither pattern of the background.
         opts = self.keyvals(ln, toks, {"scale": 1, "palette": 1, "dark": 1, "outline": 1, "object": 1, "depth": 0})
         return (opts.get("scale", [0.55])[0], opts.get("palette", [38])[0],
                 opts.get("dark", [45])[0], opts.get("outline", [2])[0],
                 opts.get("object", [None])[0], "depth" in opts)
 
     def costume_actor(self, ln, args):
-        """Actor aus einem Original-Kostüm: Stehen, Laufzyklus, Reden, vorne,
-        vorne reden – alle mit Blick nach rechts; links spiegelt die Engine."""
+        """Actor from an original costume: standing, walk cycle, talking, front,
+        front talking – all facing right; the engine mirrors for left."""
         import scumm_v4 as sv
         aid = self.new_id(self.g.actors, ln, args[0], "Actor")
         number = self.num(ln, args[3])
@@ -722,8 +722,8 @@ class Parser:
         n = len(seqs)
         levels = []
         if depth:
-            # Tiefe: dieselben Frames in kleineren Stufen, die Engine wählt je
-            # nach Größe der Lauffläche (Skalierung zur Laufzeit wäre zu teuer)
+            # Depth: the same frames in smaller levels, the engine picks one depending
+            # on the size of the walk box (scaling at runtime would be too expensive)
             for f in DEPTH_LEVELS[1:]:
                 try:
                     st, w, h, gr = orig.costume_frames(costume, palette, seqs, scale * f, dark, outline, grey=True)
@@ -739,9 +739,9 @@ class Parser:
         }
 
     def costume_place_image(self, ln, number, scales, palette_room, dark, outline):
-        """Animiertes Raumobjekt aus einem Kostüm (Stehen-Animation), eine
-        Framegruppe je Zustand; die Zustände unterscheiden sich in der Größe.
-        Alle Frames bekommen die gemeinsame Größe, Fußpunkt unten mittig."""
+        """Animated room object from a costume (standing animation), one
+        frame group per state; the states differ in size.
+        All frames get the common size, foot point at the bottom centre."""
         import scumm_v4 as sv
         costume = self.g.original_costume(number, ln)
         palette = self.g.original_room(palette_room, ln).palette
@@ -767,8 +767,8 @@ class Parser:
         oid = self.new_id(self.g.objects, ln, args[0], "Objekt")
         obj = {"name": self.text_ref(ln, args[1]), "verbs": [], "index": len(self.g.objects), "line": ln}
         self.g.objects[oid] = obj
-        # Verb-Handler werden erst nach dem Einlesen aller Objekte aufgelöst,
-        # weil 'on use <anderes_objekt>' vorwärts verweisen darf.
+        # Verb handlers are only resolved after all objects have been read,
+        # because 'on use <other_object>' may refer forward.
         while True:
             sub = self.next()
             if sub is None:
@@ -791,7 +791,7 @@ class Parser:
         room = {"boxes": [], "places": [], "entry": [], "index": len(self.g.rooms), "line": ln,
                 "original": None, "scale": 1.0, "dx": 0}
         if args[1] == "blank":
-            # Schwarzes Bild ohne Laufflächen, z. B. für „Unterdessen …“ (s117)
+            # Black image without walk boxes, e.g. for "Meanwhile …" (s117)
             if len(args) != 2:
                 raise ln.err(syntax)
             room["bg"] = ("pil", f"blank_{rid}", Image.new("RGBA", (128, 64), (0, 0, 0, 255)))
@@ -809,18 +809,18 @@ class Parser:
             if channel not in orig.CHANNELS:
                 raise ln.err(f"channel: {'/'.join(orig.CHANNELS)}")
             contrast = opts.get("contrast", [1.0])[0]
-            # height: höher als das Display (die Karte), die Kamera scrollt dann
-            # auch senkrecht; sonst auf 64 px Höhe
+            # height: taller than the display (the map), the camera then also scrolls
+            # vertically; otherwise at 64 px height
             height = opts.get("height", [64])[0]
             if not 64 <= height <= 255:
                 raise ln.err("height: 64…255")
             room["scale"] = height / source.height
             size = (orig.scaled(source.width, room["scale"]), height)
-            # Schmaler als das Display (die Karte von Mêlée): mittig auf Schwarz,
-            # Laufflächen und Objekte um denselben Versatz verschoben.
+            # Narrower than the display (the map of Mêlée): centred on black,
+            # walk boxes and objects shifted by the same offset.
             room["dx"] = max(0, (128 - size[0]) // 2)
-            # Objektbilder, die fest zur Kulisse gehören (z. B. die Piraten
-            # in der SCUMM Bar), vor der Umrechnung auflegen.
+            # Object images that are a fixed part of the background (e.g. the pirates
+            # in the SCUMM Bar), overlay them before the conversion.
             composite = source.image()
             for number in opts.get("overlay", []):
                 composite.paste(self.object_image(ln, source, number), self.object_pos(ln, source, number))
@@ -861,8 +861,8 @@ class Parser:
                 raise sub.err(f"in room unbekannt: '{kw}'")
 
     def top_start(self, ln, args):
-        """start <raum> oder ein start … end-Block (Startskript, das mit
-        room <raum> at x y beginnt)."""
+        """start <room> or a start … end block (start script that begins
+        with room <room> at x y)."""
         if len(args) == 1:
             self.g.start_room = (args[0], ln)
         elif not args:
@@ -881,9 +881,9 @@ class Parser:
         self.g.cursor = args[0]
 
     def top_routine(self, ln, args):
-        """routine <id> … end: Ablauf, der neben dem Spiel läuft (z. B. der Koch,
-        der in Abständen aus der Küche kommt). Er sperrt die Eingabe nicht und
-        pausiert, solange ein Skript läuft (Zwischensequenz, Dialog)."""
+        """routine <id> … end: background routine that runs alongside the game (e.g. the cook
+        who comes out of the kitchen at intervals). It doesn't lock input and
+        pauses while a script is running (cutscene, dialogue)."""
         if len(args) != 1:
             raise ln.err("Syntax: routine <id>")
         rid = self.new_id(self.g.routines, ln, args[0], "Ablauf")
@@ -891,8 +891,8 @@ class Parser:
         self.g.routines[rid] = (ln, body)
 
     def top_sub(self, ln, args):
-        """sub <id> … end: Unterprogramm, aufgerufen mit call <id> – für
-        Gesprächsteile, die das Original von mehreren Stellen anspringt."""
+        """sub <id> … end: subroutine, called with call <id> – for
+        parts of conversations that the original jumps to from several places."""
         if len(args) != 1:
             raise ln.err("Syntax: sub <id>")
         sid = self.new_id(self.g.subs, ln, args[0], "Unterprogramm")
@@ -900,9 +900,9 @@ class Parser:
         self.g.subs[sid] = (ln, body)
 
     def top_cutscene(self, ln, args):
-        """cutscene <id> … end: eine Szene, die ein Hintergrundablauf mit
-        play <id> auslöst (z. B. die Warnungen der Piraten, wenn man der
-        Ratte zu nahe kommt). Sie läuft wie ein Verbskript im Vordergrund."""
+        """cutscene <id> … end: a scene that a background routine triggers with
+        play <id> (e.g. the warnings of the pirates when you get too close to the
+        rat). It runs in the foreground like a verb script."""
         if len(args) != 1:
             raise ln.err("Syntax: cutscene <id>")
         cid = self.new_id(self.g.cutscenes, ln, args[0], "Szene")
@@ -910,8 +910,8 @@ class Parser:
         self.g.cutscenes[cid] = (ln, body)
 
     def top_number(self, ln, args):
-        """number <variable> original <nr>: Variable, deren Wert Texte des
-        Originals mit Code 4 (<4:nr>) als Zahl einsetzen (z. B. das Geld)."""
+        """number <variable> original <nr>: variable whose value texts of the
+        original insert as a number with code 4 (<4:nr>) (e.g. the money)."""
         if len(args) != 3 or args[1] != "original":
             raise ln.err("Syntax: number <variable> original <nr>")
         if args[0] in self.g.numbers:
@@ -919,20 +919,20 @@ class Parser:
         self.g.numbers[args[0]] = self.num(ln, args[2])
 
     def top_string(self, ln, args):
-        """string <id> original <nr>: String-Variable, die Texte des Originals
-        mit Code 7 (<7:nr>) einsetzen, z. B. der Name, den der Ausguck sich
-        merkt. Inhalt per setstring/setchar."""
+        """string <id> original <nr>: string variable that texts of the original
+        insert with code 7 (<7:nr>), e.g. the name the lookout
+        remembers. Content via setstring/setchar."""
         if len(args) != 3 or args[1] != "original":
             raise ln.err("Syntax: string <id> original <nr>")
         sid = self.new_id(self.g.strings, ln, args[0], "String")
         self.g.strings[sid] = {"original": self.num(ln, args[2]), "slot": len(self.g.strings), "line": ln}
 
     def top_card(self, ln, args):
-        """card <id> original <raum> [threshold N] [music <id>]: Vollbild aus
-        einem Originalraum (Kapitelkarte). Der Inhalt ist Schrift: Zuschnitt auf
-        den hellen Bereich, auf 128×64 eingepasst, Schwellwert auf die hellste
-        Farbkomponente (Schrift in Blau o. Ä. bleibt lesbar). Das Bild kommt aus
-        jeder Sprachfassung einzeln – der Text ist eingezeichnet."""
+        """card <id> original <room> [threshold N] [music <id>]: full screen from
+        an original room (chapter card). The content is lettering: cropped to
+        the bright area, fitted to 128×64, threshold on the brightest
+        colour component (lettering in blue or similar stays legible). The image comes from
+        each language version separately – the text is drawn in."""
         if len(args) < 3 or args[1] != "original":
             raise ln.err("Syntax: card <id> original <raum> [threshold N] [music <id>]")
         cid = self.new_id(self.g.cards, ln, args[0], "Karte")
@@ -940,7 +940,7 @@ class Parser:
         self.g.cards[cid] = {"room": self.num(ln, args[2]), "threshold": opts.get("threshold", [50])[0],
                              "music": opts.get("music", [None])[0], "line": ln}
 
-    # ---- Graustufen -------------------------------------------------------
+    # ---- Greyscale -------------------------------------------------------
 
     GREY_SYNTAX = ("Syntax: greyscale title | card <id> | room <id>, darin Zeilen\n"
                    "  layer [from X] [Tonoptionen]\n"
@@ -949,8 +949,8 @@ class Parser:
                    "gamma G, max N, dither")
 
     def top_greyscale(self, ln, args):
-        """Graustufen-Fassung eines Bildes (original.to_grey). Steht für sich,
-        damit Titel, Karten und Räume dieselbe Beschreibung nutzen."""
+        """Greyscale version of an image (original.to_grey). Stands on its own
+        so that title, cards and rooms use the same description."""
         if args[:1] == ["title"] and len(args) == 1:
             key = ("title", None)
         elif len(args) == 2 and args[0] in ("card", "room"):
@@ -1094,7 +1094,7 @@ class Parser:
         self.g.title_source = {"image": img.crop((x0, y0, x1, y1)), "width": width, "tone": (black, white)}
         self.g.title_music = (opts["music"][0], ln) if "music" in opts else None
 
-    # ---- Hilfen ---------------------------------------------------------
+    # ---- Helpers ---------------------------------------------------------
 
     def num(self, ln, v):
         try:
@@ -1116,7 +1116,7 @@ class Parser:
             if k not in arity:
                 raise ln.err(f"unbekannte Option '{k}'")
             n = arity[k]
-            if n is None:  # beliebig viele Zahlen bis zur nächsten Option
+            if n is None:  # any number of numbers up to the next option
                 n = 0
                 while i + 1 + n < len(toks) and toks[i + 1 + n] not in arity:
                     n += 1
@@ -1133,7 +1133,7 @@ class Parser:
     def place(self, ln, a, room):
         # place <obj> at x y [w h] [image …] walkto x y face dir
         # place <obj> original <nr> [image …] [walkto x y] [face dir]
-        # place decor at x y costume|image … – nur Bild, kein Hotspot
+        # place decor at x y costume|image … – image only, no hotspot
         syntax = ('Syntax: place <objekt> at x y [w h] [image "<png>" frames N speed N] walkto x y face <dir> '
                   '| place <objekt> original <nr> [walkto x y] [face <dir>]')
         if len(a) < 3 or a[1] not in ("at", "original"):
@@ -1141,7 +1141,7 @@ class Parser:
         obj = a[0]
         w = h = None
         walk = face = None
-        dx = 0   # Versatz schmaler Räume (nur für Koordinaten aus dem Original)
+        dx = 0   # offset of narrow rooms (only for coordinates from the original)
         if a[1] == "original":
             dx = room["dx"]
             if not room["original"]:
@@ -1169,15 +1169,15 @@ class Parser:
                                        "picture": 0, "door": 0, "direct": 0})
         image = opts.get("image", [None])[0]
         frames = opts.get("frames", [1])[0]
-        # Bild aus der Kulisse: Kulisse je Zustand und Ausschnitt, damit
-        # compile() mit dem greyscale-Block des Raums die Graustufen rechnet
+        # Image from the background: background per state and cutout, so that
+        # compile() computes the greyscale with the room's greyscale block
         grey_from = None
-        grey_sprite = None  # Figur als Dekoration: Graustufen aus dem Kostüm
+        grey_sprite = None  # character as decor: greyscale from the costume
         backdrop = 0
         if "picture" in opts:
-            # Aufnehmbarer Gegenstand: sein Originalbild, ausgeschnitten aus der
-            # Kulisse mit aufgelegtem Objekt. Die Kulisse selbst ist ohne ihn
-            # umgerechnet; nimmt man ihn, verschwindet das Bild.
+            # Pickable item: its original image, cut out of the
+            # background with the object overlaid. The background itself is converted
+            # without it; if you take it, the image disappears.
             if a[1] != "original":
                 raise ln.err("picture nur mit place … original <nr>")
             src = room["original"]
@@ -1187,8 +1187,8 @@ class Parser:
             image = ("pil", f"room{src.number}_obj{number}", mono.crop((x, y, x + w, y + h)))
             grey_from = {"key": f"room{src.number}_obj{number}", "box": (x, y, w, h), "states": [comp]}
         if "door" in opts:
-            # Tür: Zustand 0 = zu (wie die Kulisse), 1 = offen (Objektbild des
-            # Originals aufgelegt) – zwei Bilder, je Zustand eins.
+            # Door: state 0 = closed (like the background), 1 = open (object image of the
+            # original overlaid) – two images, one per state.
             if a[1] != "original":
                 raise ln.err("door nur mit place … original <nr>")
             src = room["original"]
@@ -1203,9 +1203,9 @@ class Parser:
             strip.paste(closed, (0, 0))
             strip.paste(opened, (w, 0))
             image = ("pil", f"room{src.number}_door{number}", strip, (w, h))
-            backdrop = 1  # Zustand 0 ist der Ausschnitt der Kulisse selbst
+            backdrop = 1  # state 0 is the cutout of the background itself
         if "costume" in opts:
-            # at x y ist hier der Fußpunkt; das Bild steht mittig darüber.
+            # at x y is the foot point here; the image stands centred above it.
             image, grey_sprite, frames, fw, fh = self.costume_place_image(
                 ln, opts["costume"][0], opts.get("states", [room["scale"]]),
                 opts.get("palette", [38])[0], opts.get("dark", [45])[0], opts.get("outline", [1])[0])
@@ -1213,9 +1213,9 @@ class Parser:
         if "walkto" in opts:
             walk = opts["walkto"]
         if "direct" in opts:
-            # Verbskripte starten beim Klick, ohne dass die Spielfigur erst
-            # hinläuft; das Skript lässt sie selbst laufen (wie r28.s203, das
-            # beim Klick auf die Küchentür sofort nach dem Koch sieht).
+            # Verb scripts start on click without the player character walking
+            # there first; the script makes it walk itself (like r28.s203, which
+            # looks for the cook right away when clicking the kitchen door).
             if "walkto" in opts:
                 raise ln.err("direct und walkto schließen sich aus")
             walk = [WALK_DIRECT, 0]
@@ -1248,8 +1248,8 @@ class Parser:
         return o.x, o.y
 
     def text_ref(self, ln, tok):
-        """Spieltexte stehen nicht im Repo: nur Verweise auf die Originalkopie
-        (oder ui.<schlüssel> für die eigenen Texte der Engine)."""
+        """Game texts are not in the repo: only references to the copy of the game
+        (or ui.<key> for the engine's own texts)."""
         m = UI_REF.fullmatch(tok)
         if m:
             if m.group(1) not in UI_TEXT["en"]:
@@ -1265,10 +1265,10 @@ class Parser:
             raise ln.err(f"{what} '{ident}' unbekannt")
         return ident
 
-    # ---- Skriptblöcke ---------------------------------------------------
+    # ---- Script blocks ---------------------------------------------------
 
     def block(self, terminators):
-        """Liest Anweisungen bis zu einem der Terminatoren. Liefert (AST, Terminator-Zeile)."""
+        """Reads statements up to one of the terminators. Returns (AST, terminator line)."""
         stmts = []
         while True:
             ln = self.next()
@@ -1300,7 +1300,7 @@ class Parser:
                 stmts.append(("cmd", ln, ln.tokens))
 
     def cond(self, ln, toks):
-        """Bedingung: Teilbedingungen, mit „and“ verknüpft; Liste von Atomen."""
+        """Condition: sub-conditions joined with "and"; list of atoms."""
         atoms, part = [], []
         for t in toks + ["and"]:
             if t == "and":
@@ -1338,10 +1338,10 @@ class Parser:
                      "[not] <actor> x|y <|> <zahl> | [not] <variable> =|<|> <zahl>, mehrere mit 'and'")
 
     def random_block(self, ln):
-        """random / case [gewicht] … / end: einer der Fälle, gleichverteilt
-        oder nach Gewicht (wie getRandomNr im Original; ein leerer Fall ist
-        erlaubt). Die Engine wählt einen Eintrag ihrer Sprungtabelle, ein Fall
-        mit Gewicht n steht dort n-mal."""
+        """random / case [weight] … / end: one of the cases, uniformly distributed
+        or by weight (like getRandomNr in the original; an empty case is
+        allowed). The engine picks an entry of its jump table, a case
+        with weight n appears there n times."""
         if len(ln.tokens) != 1:
             raise ln.err("Syntax: random, darunter 'case [gewicht]' je Fall, dann 'end'")
 
@@ -1384,7 +1384,7 @@ class Parser:
             options.append({"text": t[1], "cond": cond, "body": body, "line": opt_line})
             if term.tokens[0] == "end":
                 break
-            self.i -= 1  # 'option' gehört zur nächsten Runde
+            self.i -= 1  # 'option' belongs to the next round
             opt_line = self.next()
         else:
             raise ln.err("choose braucht mindestens eine 'option' und ein 'end'")
@@ -1394,7 +1394,7 @@ class Parser:
 
 
 # --------------------------------------------------------------------------
-# Codegenerator
+# Code generator
 # --------------------------------------------------------------------------
 
 class Compiler:
@@ -1403,27 +1403,27 @@ class Compiler:
         self.b = Blob()
         self.in_entry = False
         self.in_routine = False
-        self.strings = {}         # Text → Label, je Sprache neu
+        self.strings = {}         # text → label, new per language
         self.label_no = 0
         self.images = {}
-        self.grey_previews = {}  # Schlüssel → Graubild zum Ansehen (--preview)
-        self.src = None           # TextSource der Sprache, die gerade übersetzt wird
-        self.text_max = 0         # längste Sprechblase/Option (Textpuffer der Engine)
-        self.max_visible = 1      # gleichzeitig sichtbare Optionen (Auswahlpuffer der Engine)
-        self.lang_ui = {}         # Sprache → Labels der Engine-Texte (UI_TEXT)
+        self.grey_previews = {}  # key → grey image for viewing (--preview)
+        self.src = None           # TextSource of the language currently being translated
+        self.text_max = 0         # longest speech bubble/option (engine's text buffer)
+        self.max_visible = 1      # options visible at once (engine's choice buffer)
+        self.lang_ui = {}         # language → labels of the engine texts (UI_TEXT)
 
     def label(self, hint):
         self.label_no += 1
         return f"{hint}_{self.label_no}"
 
     def L(self, name):
-        """Label eines sprachabhängigen Teils (Header, Verben, Skripte, Texte)."""
+        """Label of a language-dependent part (header, verbs, scripts, texts)."""
         return f"{self.src.code}:{name}"
 
     @staticmethod
     def encode_text(text):
-        """Text → Bytes für die Engine: CP437, Platzhalter-Plätze als ein Byte
-        (Platz + 1, siehe scumm_text.SLOT_BASE)."""
+        """Text → bytes for the engine: CP437, placeholder slots as one byte
+        (slot + 1, see scumm_text.SLOT_BASE)."""
         enc = bytearray()
         for ch in text:
             if scumm_text.SLOT_BASE <= ord(ch) < scumm_text.SLOT_BASE + 0xFF:
@@ -1438,21 +1438,21 @@ class Compiler:
         return bytes(enc)
 
     def string(self, text):
-        """Legt einen String (nullterminiert) an; Duplikate werden geteilt."""
-        self.encode_text(text)   # früh prüfen, mit Zeilenbezug beim Aufrufer
+        """Creates a (null-terminated) string; duplicates are shared."""
+        self.encode_text(text)   # check early, with line reference at the caller
         if text not in self.strings:
             self.strings[text] = self.label("str")
         return self.strings[text]
 
     def text_line(self, ln, ref):
-        """Einzeiliger Spieltext (Verb, Name) der aktuellen Sprache als String."""
+        """Single-line game text (verb, name) of the current language as a string."""
         try:
             return self.string(self.src.line(ref))
         except TextError as e:
             raise (ln.err(str(e)) if ln else CompileError(str(e)))
 
     def bubbles(self, ln, ref):
-        """Sprechblasen eines Spieltexts in der aktuellen Sprache."""
+        """Speech bubbles of a game text in the current language."""
         m = UI_REF.fullmatch(ref)
         if m:
             text = UI_TEXT.get(self.src.code, UI_TEXT["en"])[m.group(1)]
@@ -1464,8 +1464,8 @@ class Compiler:
             raise ln.err(str(e))
 
     def card_image(self, cid):
-        """Bild der Karte in der Sprache self.src: (Label, Label der
-        Graustufen oder NONE24)."""
+        """Image of the card in the language self.src: (label, label of the
+        greyscale or NONE24)."""
         c = self.g.cards[cid]
         room = self.g.original_room_of(self.src.dir, c["room"], c["line"])
         rgb = np.asarray(room.image().convert("RGB")).max(axis=2)
@@ -1494,9 +1494,9 @@ class Compiler:
         return label, self.grey_image(f"card_{cid}_{self.src.code}_grey", [full], spec["line"])
 
     def grey_image(self, key, frames, ln, mask=False, opaque=None):
-        """Graustufen (je Frame des 1-Bit-Bilds ein Array mit Stufen 0–3) als
-        Bild ablegen: Frame f wird zu den Frames 3f, 3f+1, 3f+2 (Ebene 0–2).
-        opaque: je Frame die deckenden Pixel (Figuren), sonst alle."""
+        """Store greyscale (one array with levels 0–3 per frame of the 1-bit image) as
+        an image: frame f becomes frames 3f, 3f+1, 3f+2 (plane 0–2).
+        opaque: the opaque pixels per frame (characters), otherwise all."""
         h, w = frames[0].shape
         planes = orig.GREY_PLANES
         strip = Image.new("RGBA", (w * planes * len(frames), h))
@@ -1507,8 +1507,8 @@ class Compiler:
         return self.image(("pil", key, strip, (w, h)), ln, mask)["label"]
 
     def figure_grey(self, sprite, ln):
-        """Figur in Graustufen (("grey", schlüssel, streifen, framebreite)
-        aus original.costume_frames) ablegen; None → NONE24."""
+        """Store a character in greyscale (("grey", key, strip, frame width)
+        from original.costume_frames); None → NONE24."""
         if not sprite:
             return NONE24
         _, key, strip, fw = sprite
@@ -1522,7 +1522,7 @@ class Compiler:
             raise spec["line"].err(str(e))
 
     def room_grey(self, rid, r):
-        """Graustufen-Hintergrund eines Raums (Label oder NONE24)."""
+        """Greyscale background of a room (label or NONE24)."""
         spec = self.g.greyscale.get(("room", rid))
         if not spec:
             return NONE24
@@ -1535,8 +1535,8 @@ class Compiler:
         return self.grey_image(f"room{r['original'].number}_grey", [levels], spec["line"])
 
     def place_grey(self, rid, r, p):
-        """Graustufen einer Tür oder eines Gegenstands: Ausschnitt der Kulisse
-        je Zustand, gerechnet wie der Hintergrund des Raums."""
+        """Greyscale of a door or an item: cutout of the background
+        per state, computed like the room's background."""
         spec = self.g.greyscale.get(("room", rid))
         if not spec or not p["grey_from"]:
             return NONE24
@@ -1577,12 +1577,12 @@ class Compiler:
                 raise ln.err("greyscale title nur für title original …")
 
     def image(self, src, ln, mask=False):
-        """Bild aus einer PNG-Datei (Pfad) oder aus den Originaldaten
-        (("pil", schlüssel, bild[, framegröße])); gleiche Quellen werden nur
-        einmal abgelegt."""
+        """Image from a PNG file (path) or from the original data
+        (("pil", key, image[, frame size])); identical sources are only
+        stored once."""
         key = (src[1] if isinstance(src, tuple) else src, mask)
         if key not in self.images:
-            if isinstance(src, tuple):  # ("pil", schlüssel, bild[, framegröße])
+            if isinstance(src, tuple):  # ("pil", key, image[, frame size])
                 data, w, h, frames = encode_pil(src[2], src[1], src[3] if len(src) > 3 else None, mask)
             else:
                 path = self.g.base / src
@@ -1594,7 +1594,7 @@ class Compiler:
                                 "frames": frames, "source": src}
         return self.images[key]
 
-    # ---- Referenzen ----
+    # ---- References ----
 
     def var(self, ln, name):
         err = ln.err if ln else CompileError
@@ -1637,14 +1637,14 @@ class Compiler:
         return self.text_max + 1
 
     def shown_len(self, text):
-        """Länge eines Texts, wie die Engine ihn ausgibt: Platzhalter mit dem
-        längsten Inhalt der Variablen."""
+        """Length of a text as the engine outputs it: placeholders with the
+        longest content of the variables."""
         n = len(text)
         for code, width in self.src.widths().items():
             n += text.count(code) * (width - 2)
         return n
 
-    # ---- Aufruftiefe (Rücksprungstapel der Engine) ----
+    # ---- Call depth (engine's return stack) ----
 
     def _children(self, stmts):
         for st in stmts:
@@ -1664,8 +1664,8 @@ class Compiler:
                 yield st
 
     def depth(self, stmts, path=()):
-        """Rücksprünge, die ein Skript höchstens braucht: call und ROOM (das
-        Entry-Skript des neuen Raums) je einen, plus was darin aufgerufen wird."""
+        """Return slots a script needs at most: call and ROOM (the
+        entry script of the new room) one each, plus whatever is called in them."""
         need = 0
         for _, ln, toks in self._children(stmts):
             if toks[0] == "call" and len(toks) == 2 and toks[1] in self.g.subs:
@@ -1685,10 +1685,10 @@ class Compiler:
                     return True
         return False
 
-    ROUTINES = 2   # Hintergrundplätze der Engine (Script.cpp)
+    ROUTINES = 2   # background slots of the engine (Script.cpp)
 
     def started(self, stmts, path=()):
-        """Abläufe, die ein Skript (samt Unterprogrammen) starten kann."""
+        """Background routines a script (including subroutines) can start."""
         out = set()
         for _, ln, toks in self._children(stmts):
             if toks[0] == "start" and len(toks) == 2:
@@ -1698,9 +1698,9 @@ class Compiler:
         return out
 
     def check_routines(self):
-        """Ein Raumwechsel beendet alle Abläufe; in einem Raum laufen also
-        höchstens die, die sein Entry-Skript, die Verben seiner Objekte oder
-        ein Inventarobjekt starten. Das dürfen nicht mehr als ROUTINES sein."""
+        """A room change ends all background routines; so in a room at most those run
+        that its entry script, the verbs of its objects or
+        an inventory object start. These must not be more than ROUTINES."""
         g = self.g
         placed = {}
         for rid, r in g.rooms.items():
@@ -1749,7 +1749,7 @@ class Compiler:
         return sid
 
     def string_widths(self, src):
-        """Längster Inhalt je String-Variable in dieser Sprache (setstring)."""
+        """Longest content per string variable in this language (setstring)."""
         out = {}
         for sid, v in self.g.strings.items():
             refs = self.g.string_refs.get(sid)
@@ -1762,7 +1762,7 @@ class Compiler:
         return out
 
     def jump_unless(self, ln, cond, target):
-        """Springt nach target, sobald eine Teilbedingung nicht erfüllt ist."""
+        """Jumps to target as soon as a sub-condition is not met."""
         for kind, name, neg in cond:
             n = COND_NOT if neg else 0
             if kind == "var":
@@ -1782,7 +1782,7 @@ class Compiler:
             else:
                 self.op("JUNLESS", COND_FLAG | n, self.flag(name), target)
 
-    # ---- Skripte ----
+    # ---- Scripts ----
 
     def op(self, name, *operands):
         self.b.put("u8", OP[name])
@@ -1812,8 +1812,8 @@ class Compiler:
         self.b.mark(l_end)
 
     def st_repeat(self, ln, body):
-        """repeat … end: Endlosschleife (Hintergrundabläufe); verlassen nur
-        durch stop oder Raumwechsel."""
+        """repeat … end: endless loop (background routines); left only
+        through stop or a room change."""
         top = self.label("repeat")
         self.b.mark(top)
         self.stmts(body)
@@ -1834,11 +1834,11 @@ class Compiler:
 
     @staticmethod
     def visible_bound(options):
-        """Obergrenze, wie viele Optionen gleichzeitig sichtbar sein können:
-        jede Teilbedingung (ohne „not“) als freier Wahrheitswert, alle
-        Belegungen durchprobiert. Abhängigkeiten zwischen Teilbedingungen
-        (etwa zwei Vergleiche derselben Variablen) bleiben unberücksichtigt –
-        das macht die Grenze höchstens größer, nie zu klein."""
+        """Upper bound on how many options can be visible at once:
+        each sub-condition (without "not") as a free truth value, all
+        assignments tried. Dependencies between sub-conditions
+        (such as two comparisons of the same variable) are ignored –
+        that only makes the bound larger, never too small."""
         def key(atom):
             kind, name, _ = atom
             return (kind, repr(name))
@@ -1853,9 +1853,9 @@ class Compiler:
         return best
 
     def st_choose(self, ln, options):
-        """Dialogauswahl als Code: CHOICES, je Option Bedingung + OPTION, ASK.
-        Nach jeder Option geht es zurück zur Auswahl (Bedingungen neu
-        geprüft), bis eine Option 'done' ausführt oder keine mehr übrig ist."""
+        """Dialogue choice as code: CHOICES, per option condition + OPTION, ASK.
+        After each option it goes back to the choice (conditions checked
+        again), until an option executes 'done' or none are left."""
         if self.in_routine:
             raise ln.err("'choose' ist in einem Hintergrundablauf nicht erlaubt")
         n = self.visible_bound(options)
@@ -1867,12 +1867,12 @@ class Compiler:
         self.b.mark(l_top)
         self.op("CHOICES")
         for opt, target in zip(options, targets):
-            # Die Liste zeigt die erste Zeile, die gewählte Option erscheint ganz.
+            # The list shows the first line, the selected option appears in full.
             try:
                 lines = wrap(self.src.line(opt["text"]), OPTION_COLS, self.src.widths())
             except TextError as e:
                 raise opt["line"].err(str(e))
-            # Ist sie gewählt, schrumpft die Liste darunter bis auf eine Zeile.
+            # Once it is selected, the list below shrinks down to one line.
             if len(lines) > SCREEN_ROWS - 1:
                 raise opt["line"].err(f"Option {opt['text']} ({self.src.name}) braucht {len(lines)} Zeilen; "
                                       f"mit der Optionsliste passt das nicht auf das Display")
@@ -1883,7 +1883,7 @@ class Compiler:
             self.op("OPTION", self.string("\n".join(lines)), target)
             self.b.mark(skip)
         self.op("ASK")
-        # Sind alle Optionen ausgeblendet, läuft die Engine hier weiter.
+        # If all options are hidden, the engine continues here.
         self.op("JMP", l_end)
         self.choose_end = getattr(self, "choose_end", [])
         for opt, target in zip(options, targets):
@@ -2038,7 +2038,7 @@ class Compiler:
                 raise ln.err(f"Ablauf '{a[0]}' unbekannt")
             self.op("STOP", self.L(f"routine_{a[0]}"))
         elif kw == "room":
-            # room <raum> [at x y] [face dir]
+            # room <room> [at x y] [face dir]
             if not a or a[0] not in self.g.rooms:
                 raise ln.err(f"Raum '{a[0] if a else ''}' unbekannt (Syntax: room <raum> [at x y] [face dir])")
             if self.in_entry:
@@ -2080,12 +2080,12 @@ class Compiler:
         else:
             raise ln.err(f"unbekannter Befehl '{kw}'")
 
-    # ---- Gesamtlayout ----
+    # ---- Overall layout ----
     #
-    # game.bin:  LangDir + LangEntry je Sprache
-    #            gemeinsam: Figuren, Laufwege, Platzierungen, Musik
-    #            je Sprache: GameHeader, Verben, Objekte, Räume, Skripte, Texte
-    #            gemeinsam: Bilder, Sprachnamen
+    # game.bin:  LangDir + LangEntry per language
+    #            shared: characters, walk paths, placements, music
+    #            per language: GameHeader, verbs, objects, rooms, scripts, texts
+    #            shared: images, language names
 
     def compile(self):
         g, b = self.g, self.b
@@ -2115,7 +2115,7 @@ class Compiler:
             self.strings = {}
             self.compile_language()
 
-        # Bilder
+        # Images
         cursor = self.image(g.cursor, None, mask=True) if g.cursor else None
         title = self.image(g.title, None) if g.title else None
         self.cursor_label = cursor["label"] if cursor else NONE24
@@ -2128,8 +2128,8 @@ class Compiler:
             b.mark(f"langname:{src.code}")
             b.raw(src.name.encode("cp437") + b"\0")
 
-        # Header erst jetzt (Cursor und Titel sind jetzt abgelegt) in ihre
-        # reservierten Plätze.
+        # Headers only now (cursor and title are stored by now) into their
+        # reserved slots.
         b.resolve()
         for src in g.languages:
             self.src = src
@@ -2138,8 +2138,8 @@ class Compiler:
             at = b.labels[self.L("header")]
             b.data[at:at + len(head.data)] = head.data
 
-        # Der Bereich des Sprachverzeichnisses ist hier noch genullt; die
-        # Build-ID hängt also nur vom Inhalt ab.
+        # The area of the language directory is still zeroed here; so the
+        # build ID depends only on the content.
         self.build_id = int.from_bytes(hashlib.sha1(bytes(b.data)).digest()[:2], "little")
         head = Blob()
         head.labels = b.labels
@@ -2153,7 +2153,7 @@ class Compiler:
         return bytes(b.data)
 
     def compile_shared(self):
-        """Teile ohne Text: Figuren, Laufwege und Platzierungen, Musik."""
+        """Parts without text: characters, walk paths and placements, music."""
         g, b = self.g, self.b
         b.mark("actors")
         for aid, a in g.actors.items():
@@ -2170,9 +2170,9 @@ class Compiler:
         for aid, a in g.actors.items():
             if not a.get("levels"):
                 continue
-            # Absteigend: eine Stufe gilt, sobald die Größe unter der Mitte zwischen
-            # ihrem und dem nächstgrößeren Anteil liegt (u8 Schwelle, u24 Sprite,
-            # u24 Sprite in Graustufen).
+            # Descending: a level applies as soon as the size is below the midpoint between
+            # its fraction and the next larger one (u8 threshold, u24 sprite,
+            # u24 sprite in greyscale).
             b.mark(f"depth_{aid}")
             b.put("u8", len(a["levels"]))
             prev = 1.0
@@ -2198,8 +2198,8 @@ class Compiler:
             b.mark(f"boxes_{rid}")
             for corners, ln, (top, bottom) in r["boxes"]:
                 pts = [(int(round(x)), int(round(y))) for x, y in corners]
-                # Laufwege dürfen über den Bildrand hinausgehen: Treppen nach
-                # unten, Ausgänge seitlich aus dem Bild (wie im Original).
+                # Walk paths may extend beyond the image edge: stairs going
+                # down, exits sideways out of the image (as in the original).
                 if not all(0 <= x < 0x8000 and 0 <= y < 256 for x, y in pts):
                     raise ln.err(f"Lauffläche {pts} außerhalb des Wertebereichs")
                 (ulx, uly), (urx, ury), (lrx, lry), (llx, lly) = pts
@@ -2237,8 +2237,8 @@ class Compiler:
                 b.record("NoteRec", ocr=ocr, ms=ms)
 
     def compile_language(self):
-        """Alles mit Text für die Sprache self.src: Verben, Objekte, Räume
-        (wegen der Entry-Skripte), Skripte, Texte. Der Header folgt später."""
+        """Everything with text for the language self.src: verbs, objects, rooms
+        (because of the entry scripts), scripts, texts. The header follows later."""
         g, b, L = self.g, self.b, self.L
         b.mark(L("header"))
         b.raw(bytes(record_size("GameHeader")))
@@ -2296,7 +2296,7 @@ class Compiler:
         for sid, (ln, body) in g.subs.items():
             self.script(body, L(f"sub_{sid}"))
         start = g.start_room
-        if isinstance(start, tuple):  # Kurzform: start <raum>
+        if isinstance(start, tuple):  # short form: start <room>
             start_room, start_ln = start
             if start_room not in g.rooms:
                 raise start_ln.err(f"Raum '{start_room}' unbekannt")
@@ -2309,13 +2309,13 @@ class Compiler:
         ui = UI_TEXT.get(self.src.code, UI_TEXT["en"])
         self.lang_ui[self.src.code] = {key: self.string(text) for key, text in ui.items()}
 
-        # Texte zuletzt: sie entstehen während der Codegenerierung
+        # texts last: they are created during code generation
         for text, label in self.strings.items():
             b.mark(label)
             b.raw(self.encode_text(text) + b"\0")
 
     def header_record(self):
-        """GameHeader der Sprache self.src (Labels über das Haupt-Blob)."""
+        """GameHeader of the language self.src (labels via the main blob)."""
         g, L = self.g, self.L
         title_music = NONE8
         if g.title_music:
@@ -2355,7 +2355,7 @@ class Compiler:
         if "walk" not in g.verbs or g.verbs["walk"]["index"] != 0:
             raise CompileError("das erste Verb muss 'walk' sein (Standardverb der Engine)")
 
-    # ---- Header für die Engine ----
+    # ---- Header for the engine ----
 
     def header(self):
         g = self.g

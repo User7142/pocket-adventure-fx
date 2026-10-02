@@ -18,17 +18,17 @@ namespace World {
 namespace {
   uint8_t flags[FLAG_BYTES];
 
-  // Laufgeschwindigkeit pro Frame in 1/16 px: waagerecht 1 px, senkrecht ½ px
-  // (die Räume sind perspektivisch gestaucht, wie im Original).
+  // Walking speed per frame in 1/16 px: horizontally 1 px, vertically ½ px
+  // (the rooms are compressed in perspective, as in the original).
   constexpr int16_t SPEED_X = 16;
   constexpr int16_t SPEED_Y = 8;
 
-  // --- Geometrie der Laufflächen (SCUMM-Walkboxes) ---
+  // --- Walk box geometry (SCUMM walkboxes) ---
   //
-  // Eine Box ist ein konvexes Viereck, das zu einer Linie oder einem Punkt
-  // entarten darf (Treppen und schmale Wege im Original). Liegt das Ziel in
-  // einer anderen Box, liefert die vom Compiler berechnete Matrix die nächste
-  // Box auf dem Weg; der Actor läuft zum nächstgelegenen Punkt darin.
+  // A box is a convex quadrilateral that may degenerate into a line or a point
+  // (stairs and narrow paths in the original). If the target lies in
+  // another box, the matrix computed by the compiler yields the next
+  // box on the path; the actor walks to the closest point inside it.
 
   struct Pt {
     int16_t x, y;
@@ -53,8 +53,8 @@ namespace {
     return dx * dx + dy * dy;
   }
 
-  // Punkt im Inneren (Rand eingeschlossen). Entartete Boxen haben kein
-  // Inneres; für sie zählt nur der Rand, siehe closestInBox().
+  // Point inside (edge included). Degenerate boxes have no
+  // interior; for them only the edge counts, see closestInBox().
   bool inside(const BoxRec& b, Pt p) {
     int8_t sign = 0;
     uint8_t edges = 0;
@@ -81,8 +81,8 @@ namespace {
     return {int16_t(a.x + (dx * t + len2 / 2) / len2), int16_t(a.y + (dy * t + len2 / 2) / len2)};
   }
 
-  // Laufflächen bleiben im FX-Flash (die Karte von Mêlée hat 46, im RAM wären
-  // das über 500 Byte); eine Box zu lesen dauert nur Mikrosekunden.
+  // Walk boxes stay in the FX flash (the Mêlée map has 46, in RAM that would
+  // be over 500 bytes); reading one box takes only microseconds.
   BoxRec readBox(uint8_t i) {
     BoxRec b;
     FX::readDataObject(World::roomRec.boxes + uint24_t(i) * sizeof(BoxRec), b);
@@ -105,7 +105,7 @@ namespace {
     return best;
   }
 
-  // Nächste Lauffläche zu p; out erhält den nächsten begehbaren Punkt.
+  // Walk box nearest to p; out receives the nearest walkable point.
   uint8_t nearestBox(Pt p, Pt& out) {
     uint8_t best = 0;
     int32_t bestDist = INT32_MAX;
@@ -131,8 +131,8 @@ namespace {
     return {int16_t(s.x >> SUBPIXEL_SHIFT), int16_t(s.y >> SUBPIXEL_SHIFT)};
   }
 
-  // Bestimmt den nächsten Wegpunkt. Die Schleife wechselt höchstens ein paar
-  // Mal die Box, wenn der Actor schon auf der Grenze zur nächsten steht.
+  // Determines the next waypoint. The loop changes the box at most a few
+  // times, if the actor is already standing on the border to the next one.
   void plan(ActorState& s) {
     for (uint8_t guard = 0; guard < MAX_WALKBOXES + 1; ++guard) {
       if (s.box == s.targetBox) {
@@ -144,7 +144,7 @@ namespace {
       Pt pos = position(s);
       uint8_t next = nextBoxOnPath(s.box, s.targetBox);
       if (next == NONE8) {
-        // Ziel unerreichbar: so nah wie möglich auf der eigenen Fläche.
+        // Target unreachable: as close as possible on its own walk box.
         Pt c = closestInBox(s.box, {int16_t(s.targetX), int16_t(s.targetY)});
         s.targetX = c.x;
         s.targetY = c.y;
@@ -192,12 +192,12 @@ namespace {
 
   void spriteSize(uint24_t sprite, uint16_t& w, uint16_t& h) {
     FX::seekData(sprite);
-    w = FX::readPendingUInt16();  // Bild-Header ist big-endian (FX-Format)
+    w = FX::readPendingUInt16();  // image header is big-endian (FX format)
     h = FX::readPendingLastUInt16();
   }
 
-  // Größe (255 = voll) an der Position des Actors: aus seiner Lauffläche,
-  // linear zwischen oberer und unterer Kante (Skalierung des Originals).
+  // Scale (255 = full) at the actor's position: from its walk box,
+  // linear between the upper and lower edge (the original's scaling).
   uint8_t scaleAt(const ActorState& s) {
     if (!World::roomRec.boxCount) return 255;
     const BoxRec b = readBox(s.box);
@@ -209,9 +209,9 @@ namespace {
     return b.scaleTop + int16_t(int16_t(b.scaleBottom) - b.scaleTop) * (y - top) / (bottom - top);
   }
 
-  // Sprite für die Größe: Figuren mit Tiefe haben kleinere Stufen (advc.py:
-  // u8 Anzahl, je Stufe u8 Schwelle + u24 Sprite + u24 Graustufen,
-  // absteigend). grey erhält die Graustufen-Fassung oder NONE24.
+  // Sprite for the scale: characters with depth have smaller levels (advc.py:
+  // u8 count, per level u8 threshold + u24 sprite + u24 greyscale,
+  // descending). grey receives the greyscale version or NONE24.
   uint24_t actorSprite(const ActorState& s, const ActorRec& rec, uint24_t& grey) {
     grey = rec.grey;
     if (rec.depth == NONE24) return rec.sprite;
@@ -229,7 +229,7 @@ namespace {
     return sprite;
   }
 
-  // Sprite, Frame und Größe eines Actors für den aktuellen Zustand.
+  // Sprite, frame and size of an actor for its current state.
   void prepareActor(uint8_t a) {
     ActorState& s = World::actors[a];
     ActorRec rec;
@@ -245,7 +245,7 @@ namespace {
     }
     uint24_t grey;
     uint24_t mono = actorSprite(s, rec, grey);
-    // Graustufen: drei Frames je Frame, einer je Ebene (drawActor)
+    // Greyscale: three frames per frame, one per plane (drawActor)
     s.layered = greyscale && grey != NONE24;
     s.sprite = s.layered ? grey : mono;
     uint16_t w, h;
@@ -264,7 +264,7 @@ namespace {
                    s.sprite, frame, mode);
   }
 
-  // Kamera: folgt der Spielfigur, außer ein Skript schwenkt sie (pan).
+  // Camera: follows the player character unless a script pans it (pan).
   int16_t panX = -1;
 
   int16_t cameraTarget() {
@@ -275,7 +275,7 @@ namespace {
     return target;
   }
 
-  // Senkrecht nur in Räumen, die höher als das Display sind (die Karte).
+  // Vertically only in rooms taller than the display (the map).
   int16_t cameraTargetY() {
     int16_t maxScroll = int16_t(World::roomRec.height) - HEIGHT;
     int16_t target = position(World::actors[PLAYER]).y - HEIGHT / 2;
@@ -371,18 +371,18 @@ void World::draw() {
   for (uint8_t i = 0; i < roomRec.placeCount; ++i) {
     PlaceRec p;
     readPlace(i, p);
-    // Dekoration (object == NONE8): nur Bild, immer Zustand 0.
+    // Decor (object == NONE8): image only, always state 0.
     uint8_t flags = p.object == NONE8 ? 0 : objects[p.object];
     if (p.image == NONE24 || (flags & (OBJ_OWNED | OBJ_HIDDEN))) continue;
-    // Zustand 0 zeigt genau die Kulisse (geschlossene Tür): nichts zu tun –
-    // ein Sprite kostet je Ebene rund 0,4 ms.
+    // State 0 shows exactly the background (closed door): nothing to do –
+    // a sprite costs about 0.4 ms per plane.
     if (p.backdrop && !(flags & OBJ_STATE)) continue;
     uint8_t frame = (flags & OBJ_STATE) * p.frames;
     if (p.frames > 1) frame += (arduboy.frameCount / p.speed) % p.frames;
     drawImage(int16_t(p.x) - scrollX, int16_t(p.y) - scrollY, p.image, p.grey, frame, dbmMasked);
   }
 
-  // Actors nach Fußlinie sortiert: weiter vorne = später gezeichnet.
+  // Actors sorted by foot line: further in front = drawn later.
   uint8_t order[ACTOR_COUNT];
   uint8_t n = 0;
   for (uint8_t a = 0; a < ACTOR_COUNT; ++a) {
@@ -494,7 +494,7 @@ void World::setHidden(uint8_t object, bool hidden) {
 }
 
 uint8_t World::hitTest(int16_t x, int16_t y) {
-  // Figuren mit eigenem Objekt zuerst: Sie werden über der Kulisse gezeichnet.
+  // Characters with their own object first: they are drawn over the background.
   for (uint8_t a = 0; a < ACTOR_COUNT; ++a) {
     if (actors[a].room != room) continue;
     ActorRec rec;
@@ -510,7 +510,7 @@ uint8_t World::hitTest(int16_t x, int16_t y) {
     int16_t left = p.x - int16_t(w / 2);
     if (x >= left && x < left + int16_t(w) && y > p.y - int16_t(h) && y <= p.y) return object;
   }
-  // Rückwärts: später platzierte Objekte liegen oben.
+  // Backwards: objects placed later lie on top.
   for (uint8_t i = roomRec.placeCount; i-- > 0;) {
     PlaceRec p;
     readPlace(i, p);
@@ -525,8 +525,8 @@ bool World::findPlace(uint8_t object, PlaceRec& out) {
     readPlace(i, out);
     if (out.object == object) return true;
   }
-  // Figur als Objekt: neben sie laufen, auf der Seite, von der die
-  // Spielfigur kommt, und ihr zugewandt stehen bleiben.
+  // Character as object: walk up beside it, on the side the
+  // player character is coming from, and stop facing it.
   constexpr int16_t BESIDE = 14;
   for (uint8_t a = 0; a < ACTOR_COUNT; ++a) {
     if (a == PLAYER || actors[a].room != room) continue;

@@ -6,50 +6,50 @@
 namespace {
   constexpr uint8_t CHAR_W = 6;
   constexpr uint8_t LINE_H = 8;
-  constexpr uint8_t BAR_H = 8;           // Satzzeile oben
+  constexpr uint8_t BAR_H = 8;           // sentence line at the top
   constexpr uint8_t MENU_COLS = 2;
   constexpr uint8_t MENU_NAME_CHARS = 10;
   constexpr uint8_t MENU_VERB_ROWS = (VERB_COUNT + MENU_COLS - 1) / MENU_COLS;
-  // Unter den Verben eine Zeile über die volle Breite: Graustufen an/aus
+  // Below the verbs a row across the full width: greyscale on/off
   constexpr uint8_t MENU_GREY_ROW = MENU_VERB_ROWS;
-  constexpr uint8_t MENU_INV_ROW = MENU_GREY_ROW + 1;  // erste Inventarzeile
+  constexpr uint8_t MENU_INV_ROW = MENU_GREY_ROW + 1;  // first inventory row
   constexpr uint8_t MENU_INV_TOP = MENU_INV_ROW * LINE_H + 1;
   constexpr uint8_t MENU_INV_LINE_H = 7;
-  // Die unterste Pixelzeile zeigt das Display nicht (ArduboyG, Park-Zeile).
+  // The display does not show the bottom pixel row (ArduboyG, park row).
   constexpr uint8_t MENU_INV_ROWS = (HEIGHT - 1 - MENU_INV_TOP) / MENU_INV_LINE_H;
-  static_assert(MENU_INV_ROWS >= 1, "kein Platz für das Inventar im Menü");
+  static_assert(MENU_INV_ROWS >= 1, "no room for the inventory in the menu");
 
-  // --- Sprechtext ---
-  char text[TEXT_BUFFER];  // Sprechblase oder voller Text der gewählten Option
+  // --- Speech text ---
+  char text[TEXT_BUFFER];  // speech bubble or full text of the selected option
   uint8_t textActor = NONE8;
-  uint16_t textFrames;  // 0 = kein Text
+  uint16_t textFrames;  // 0 = no text
   uint24_t cardImage = NONE24;
   uint24_t cardGrey;
   bool cardMusic;
   uint8_t cardFrames;
 
-  // --- Dialogauswahl ---
+  // --- Dialogue choice ---
   uint24_t choiceText[MAX_OPTIONS];
   uint24_t choiceTarget[MAX_OPTIONS];
   uint8_t choiceCount;
   uint8_t choiceSel;
-  uint8_t choiceTop;            // erste sichtbare Option (Liste scrollt)
-  uint8_t choiceShown = NONE8;  // Option, deren voller Text in text[] steht
-  uint8_t choiceRows;           // sichtbare Zeilen der Liste (je nach Länge des Texts)
-  uint8_t flashFrames;          // Blitz: Restdauer
+  uint8_t choiceTop;            // first visible option (list scrolls)
+  uint8_t choiceShown = NONE8;  // option whose full text is in text[]
+  uint8_t choiceRows;           // visible rows of the list (depending on the text length)
+  uint8_t flashFrames;          // flash: remaining duration
   bool choiceActive;
 
-  // --- Satz ---
-  uint8_t verb = 0;             // 0 = „Gehe zu“ (vom Compiler erzwungen)
-  uint8_t firstObject = NONE8;  // gesetzt, solange das zweite Objekt fehlt
+  // --- Sentence ---
+  uint8_t verb = 0;             // 0 = “Walk to” (enforced by the compiler)
+  uint8_t firstObject = NONE8;  // set while the second object is missing
   uint8_t hover = NONE8;
 
-  // Satz, der ausgeführt wird, sobald die Spielfigur angekommen ist
+  // Sentence executed as soon as the player character has arrived
   bool pending;
   uint8_t pendingFace;
   uint24_t pendingScript;
 
-  // --- Cursor und Menü ---
+  // --- Cursor and menu ---
   int16_t cursorX = WIDTH / 2;
   int16_t cursorY = HEIGHT / 2;
   uint8_t holdFrames;
@@ -68,9 +68,9 @@ namespace {
     return r.name;
   }
 
-  // Skript für „verb object [other]“ aus der Verbtabelle des Objekts.
-  // Mit any gilt auch „on other“ (VERB_ANY: alle übrigen Verben außer
-  // „Gehe zu“, wie Verb 255 im Original), aber erst nach den genauen.
+  // Script for “verb object [other]” from the object's verb table.
+  // With any, “on other” also applies (VERB_ANY: all remaining verbs except
+  // “Walk to”, like verb 255 in the original), but only after the exact ones.
   uint24_t findHandler(uint8_t object, uint8_t v, uint8_t other, bool any = false) {
     ObjectRec r;
     FX::readDataObject(World::header.objects + uint24_t(object) * sizeof(ObjectRec), r);
@@ -89,8 +89,8 @@ namespace {
     firstObject = NONE8;
   }
 
-  // Führt einen vollständigen Satz aus: passendes Skript suchen (in beiden
-  // Richtungen, dann die Standardantwort des Verbs), vorher zum Objekt laufen.
+  // Executes a complete sentence: look up a matching script (in both
+  // directions, then the verb's default response), walking to the object first.
   void execute(uint8_t v, uint8_t a, uint8_t b) {
     uint24_t script = findHandler(a, v, b);
     if (script == NONE24 && b != NONE8) script = findHandler(b, v, a);
@@ -110,14 +110,14 @@ namespace {
     resetSentence();
   }
 
-  // Ein Objekt wurde angeklickt (im Raum oder im Inventar).
+  // An object was clicked (in the room or in the inventory).
   void pick(uint8_t object) {
     if (firstObject != NONE8) {
       execute(verb, firstObject, object);
       return;
     }
-    // Zwei-Objekt-Verben („Benutze … mit …“) warten auf das zweite Objekt,
-    // wenn es für das erste allein keine Antwort gibt.
+    // Two-object verbs (“Use … with …”) wait for the second object
+    // if there is no response for the first one alone.
     if (readVerb(verb).prep != NONE24 && findHandler(object, verb, NONE8) == NONE24) {
       firstObject = object;
       return;
@@ -145,7 +145,7 @@ namespace {
     if (cursorY >= HEIGHT) cursorY = HEIGHT - 1;
   }
 
-  // --- Menü: Zeilen 0..MENU_VERB_ROWS-1 Verben, danach Inventar ---
+  // --- Menu: rows 0..MENU_VERB_ROWS-1 verbs, then inventory ---
 
   uint8_t menuItems(uint8_t row) {
     if (row < MENU_VERB_ROWS) {
@@ -171,7 +171,7 @@ namespace {
         if (menuCol >= menuItems(r)) menuCol = 0;
       }
     }
-    // Inventar scrollt, damit die Auswahl sichtbar bleibt.
+    // The inventory scrolls so that the selection stays visible.
     if (menuRow >= MENU_INV_ROW) {
       uint8_t invRow = menuRow - MENU_INV_ROW;
       if (invRow < menuTop) menuTop = invRow;
@@ -192,16 +192,16 @@ namespace {
     }
     uint8_t item = World::inventory[(menuRow - MENU_INV_ROW) * MENU_COLS + menuCol];
     if (verb == 0) {
-      // Mit „Gehe zu“ auf ein Inventarobjekt: Verb aus der Spielbeschreibung.
+      // “Walk to” on an inventory object: verb from the game description.
       if (World::header.inventoryVerb == NONE8) return;
       verb = World::header.inventoryVerb;
     }
     pick(item);
   }
 
-  // --- Zeichnen ---
+  // --- Drawing ---
 
-  // Erste Zeile eines Strings aus dem FX-Flash, höchstens maxChars Zeichen.
+  // First line of a string from the FX flash, at most maxChars characters.
   void printFx(uint24_t address, uint8_t maxChars) {
     char buf[TEXT_COLS + 2];
     if (maxChars > sizeof(buf) - 1) maxChars = sizeof(buf) - 1;
@@ -211,14 +211,14 @@ namespace {
     arduboy.print(buf);
   }
 
-  // Hängt „ Wort“ aus dem FX-Flash an den Satzpuffer an.
+  // Appends “ word” from the FX flash to the sentence buffer.
   uint8_t appendFx(char* buf, uint8_t len, uint8_t size, uint24_t address) {
     if (len && len < size - 1) buf[len++] = ' ';
     return len + World::readString(address, buf + len, size - len);
   }
 
-  // Satzzeile: „Verb Objekt [prep Objekt]“. Passt der Satz nicht in eine
-  // Zeile, wird sein Ende gezeigt – dort steht das Objekt unter dem Cursor.
+  // Sentence line: “Verb Object [prep Object]”. If the sentence does not fit on
+  // one line, its end is shown – that is where the object under the cursor is.
   void drawSentence() {
     constexpr uint8_t COLS = WIDTH / CHAR_W;
     char buf[3 * (TEXT_COLS + 1) + 8];
@@ -269,10 +269,10 @@ namespace {
     }
   }
 
-  // Sprechtext: Kasten oben, horizontal über dem Sprecher, Zeilen zentriert.
-  // top ist die Oberkante der ersten Zeile: 1 lässt über dem Text eine Pixel-
-  // zeile Rand; ohne Rand (0) schließt die Leerzeile unter jedem Zeichen den
-  // Kasten nach unten ab.
+  // Speech text: box at the top, horizontally above the speaker, lines centred.
+  // top is the upper edge of the first line: 1 leaves a pixel row of margin
+  // above the text; without margin (0) the empty row below each character
+  // closes off the box at the bottom.
   void drawText(uint8_t top) {
     uint8_t lines = 1, maxLen = 0, len = 0;
     for (const char* p = text;; ++p) {
@@ -285,7 +285,7 @@ namespace {
         ++len;
       }
     }
-    // 1 px Rand links; rechts reicht die leere Abstandsspalte des Fonts plus 1 px.
+    // 1 px margin on the left; on the right the font's empty spacing column plus 1 px suffices.
     int16_t w = maxLen * CHAR_W + 2;
     int16_t x = (textActor == NONE8 ? WIDTH / 2 : World::screenX(textActor)) - w / 2;
     if (x < 0) x = 0;
@@ -302,10 +302,10 @@ namespace {
     }
   }
 
-  // Gewählte Option: vollen Text laden; die Liste zeigt höchstens
-  // CHOICE_ROWS Zeilen und weniger, wenn der volle Text sonst nicht darüber
-  // passt (advc.py prüft: höchstens HEIGHT/LINE_H - 1 Zeilen). Die Liste
-  // scrollt so, dass die Auswahl sichtbar bleibt.
+  // Selected option: load the full text; the list shows at most
+  // CHOICE_ROWS rows, and fewer if the full text would not fit above it
+  // otherwise (advc.py checks: at most HEIGHT/LINE_H - 1 lines). The list
+  // scrolls so that the selection stays visible.
   void showChoice() {
     World::readString(choiceText[choiceSel], text, sizeof(text));
     textActor = NONE8;
@@ -321,11 +321,11 @@ namespace {
     if (choiceSel >= choiceTop + rows) choiceTop = choiceSel - rows + 1;
   }
 
-  // Dialogoptionen: unten die Liste (erste Zeile je Option), oben der volle
-  // Text der gewählten Option, falls er umbricht. Der Text steht bündig
-  // oben, damit seine letzte Zeile nicht in die Trennlinie über der Liste
-  // reicht. Weitere Optionen über oder unter dem sichtbaren Teil zeigt ein
-  // Pfeil am rechten Rand.
+  // Dialogue options: the list at the bottom (first line per option), the full
+  // text of the selected option at the top, if it wraps. The text is flush
+  // with the top so that its last line does not reach into the separator line
+  // above the list. More options above or below the visible part are shown
+  // by an arrow at the right edge.
   void drawChoices() {
     if (choiceShown != choiceSel) showChoice();
     if (strchr(text, '\n')) drawText(0);
@@ -368,7 +368,7 @@ void Ui::say(uint8_t actor, uint24_t address) {
   uint8_t len = World::readString(address, text, sizeof(text));
   textActor = actor;
   World::talker = actor;
-  textFrames = 45 + len * 4;  // grob Lesegeschwindigkeit bei 60 fps
+  textFrames = 45 + len * 4;  // rough reading speed at 60 fps
 }
 
 void Ui::flash(uint8_t frames) {
@@ -454,8 +454,8 @@ void Ui::update() {
     }
     return;
   }
-  // Läuft ein Skript (etwa eine Szene, die ein Ablauf ausgelöst hat), wartet
-  // ein angefangener Satz, bis es fertig ist.
+  // If a script is running (e.g. a scene triggered by a background routine), a
+  // started sentence waits until it has finished.
   if (Script::running()) return;
   if (pending && !World::isWalking(PLAYER)) {
     pending = false;
@@ -491,7 +491,7 @@ void Ui::update() {
     if (hover != NONE8) {
       pick(hover);
     } else if (cursorY >= BAR_H) {
-      // Leere Stelle: hinlaufen, ein halbfertiger Satz wird verworfen.
+      // Empty spot: walk there; a half-finished sentence is discarded.
       resetSentence();
       World::walkTo(PLAYER, cursorX + World::scrollX, cursorY + World::scrollY);
     }

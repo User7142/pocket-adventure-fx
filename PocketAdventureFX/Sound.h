@@ -2,26 +2,26 @@
 
 #include "Common.h"
 
-// Einstimmiger PC-Speaker-Player für Tracks im FX-Flash.
+// Monophonic PC-speaker player for tracks in the FX flash.
 //
-// Die Noten des Titelthemas dauern meist nur 10–18 ms und damit
-// kürzer als ein Frame (16,7 ms). Das Timing läuft deshalb nicht über die
-// Frame-Schleife, sondern über einen 1-kHz-Interrupt auf Timer1; Timer3
-// erzeugt im CTC-Modus die Tonhöhe direkt auf dem Lautsprecher-Pin.
+// The notes of the title theme mostly last only 10–18 ms, which is
+// shorter than a frame (16.7 ms). Timing therefore does not run via the
+// frame loop but via a 1 kHz interrupt on Timer1; Timer3
+// generates the pitch directly on the speaker pin in CTC mode.
 //
-// Der Interrupt liest nur aus einem RAM-Ringpuffer. Nachgefüllt wird er
-// aus dem FX-Flash in update(), also im Hauptprogramm – so kommen sich der
-// Interrupt und die SPI-Zugriffe auf Flash und Display nie in die Quere.
+// The interrupt only reads from a RAM ring buffer. It is refilled
+// from the FX flash in update(), i.e. in the main program – so the
+// interrupt and the SPI accesses to flash and display never get in each other's way.
 //
-// Belegt Timer1: Arduboy2::setRGBled() (PWM auf Timer1) darf daneben nicht
-// benutzt werden, digitalWriteRGB() dagegen schon.
+// Occupies Timer1: Arduboy2::setRGBled() (PWM on Timer1) must not be
+// used alongside it, digitalWriteRGB() however may.
 //
-// Stummschaltung: Arduboy2Audio::off() schaltet die Lautsprecher-Pins auf
-// Eingang, dann bleibt der Player lautlos, ohne dass er davon wissen muss.
+// Muting: Arduboy2Audio::off() switches the speaker pins to
+// input, so the player stays silent without having to know about it.
 namespace Sound {
   void begin(uint24_t musicTable, uint8_t musicCount);
   void play(uint8_t track);  // NONE8 = stop
   void stop();
-  void update();             // einmal pro Frame, außerhalb anderer FX-Lesevorgänge
+  void update();             // once per frame, outside of other FX reads
   bool playing();
 }

@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""Erzeugt die Platzhalter-Sprites unter game/art/ als PNG.
+"""Generates the placeholder sprites under game/art/ as PNG.
 
-Kulissen, Titel und Figuren kommen aus den Originaldaten (tools/scumm_v4.py);
-übrig ist ein eigenes Kleinteil ohne Original-Gegenstück: der Cursor. Die PNGs sind die
-Quellen für den Asset-Compiler (tools/advc.py); handgepixelte oder aus dem
-Original konvertierte Sprites können sie jederzeit ersetzen. Das Skript
-überschreibt vorhandene Dateien nur mit --force.
+Backgrounds, title and characters come from the original data (tools/scumm_v4.py);
+what remains is one small custom piece without an original counterpart: the cursor. The PNGs
+are the sources for the asset compiler (tools/advc.py); hand-pixelled sprites or sprites
+converted from the original can replace them at any time. The script
+overwrites existing files only with --force.
 
-Farbkonvention (wie fxdata-build.py): weiß = Pixel an, schwarz = Pixel aus,
-Alpha < 255 = transparent (erzeugt eine Maske).
+Colour convention (as in fxdata-build.py): white = pixel on, black = pixel off,
+alpha < 255 = transparent (creates a mask).
 
-ASCII-Sprites: '#' weiß, 'o' schwarz (deckend), ' ' transparent. outline
-legt einen deckenden schwarzen Rand um jede Figur, damit sie sich von der
-gerasterten Kulisse abhebt.
+ASCII sprites: '#' white, 'o' black (opaque), ' ' transparent. outline
+puts an opaque black outline around each character so that it stands out
+against the dithered background.
 """
 import argparse
 import sys
@@ -29,15 +29,15 @@ CLEAR = (0, 0, 0, 0)
 
 
 # --------------------------------------------------------------------------
-# ASCII-Sprites
+# ASCII sprites
 # --------------------------------------------------------------------------
 
 def ascii_frames(frames, outline):
-    """Wandelt gleich große ASCII-Frames in einen horizontalen Sprite-Streifen.
+    """Converts equally sized ASCII frames into a horizontal sprite strip.
 
-    outline = Breite des deckenden schwarzen Randes in Pixeln (0 = keiner);
-    jeder Frame wächst um diese Breite pro Seite. Vor den gerasterten
-    Original-Kulissen braucht es 2 px, damit Figuren nicht im Muster aufgehen.
+    outline = width of the opaque black outline in pixels (0 = none);
+    each frame grows by this width per side. Against the dithered original
+    backgrounds it takes 2 px so that characters don't dissolve into the pattern.
     """
     h = len(frames[0])
     w = len(frames[0][0])
@@ -56,8 +56,8 @@ def ascii_frames(frames, outline):
                     px[ox + x, pad + y] = WHITE
                 elif c == "o":
                     px[ox + x, pad + y] = BLACK
-        # Rand schrittweise wachsen lassen: erst um die weißen Pixel, dann
-        # um alles Deckende.
+        # Grow the outline step by step: first around the white pixels, then
+        # around everything opaque.
         for step in range(outline):
             grow = []
             for y in range(fh):

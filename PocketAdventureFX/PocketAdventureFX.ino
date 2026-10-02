@@ -1,14 +1,14 @@
-// Pocket Adventure FX – Adventure-Engine für den Arduboy FX.
+// Pocket Adventure FX – adventure engine for the Arduboy FX.
 //
-// Die Engine ist datengetrieben: Räume, Grafiken, Texte, Skripte und Musik
-// stehen im FX-Flash (game/game.adv → tools/advc.py → fxdata/game.bin), je
-// Sprache ein Satz Texte und Skripte. Im Sketch selbst steckt nur der
-// Interpreter. Details: README.md.
+// The engine is data-driven: rooms, graphics, texts, scripts and music
+// live in the FX flash (game/game.adv → tools/advc.py → fxdata/game.bin), one
+// set of texts and scripts per language. The sketch itself only contains the
+// interpreter. Details: README.md.
 //
-// Bildaufbau (ArduboyG, Common.h): Das Display zeigt drei Ebenen im Wechsel.
-// loop() läuft einmal je Ebene: warten, bis die vorige Ebene gezeigt ist,
-// bei Bedarf die Spiellogik weiterschalten (60-mal pro Sekunde, wie vorher
-// mit nextFrame), dann die nächste Ebene zeichnen.
+// Frame composition (ArduboyG, Common.h): the display shows three planes in turn.
+// loop() runs once per plane: wait until the previous plane has been shown,
+// advance the game logic if needed (60 times per second, as previously
+// with nextFrame), then draw the next plane.
 
 #include <EEPROM.h>
 
@@ -20,23 +20,23 @@
 #include "Ui.h"
 #include "World.h"
 
-// advc.py legt alle Adressen relativ zum Anfang von game.bin an.
-static_assert(gameData == 0, "game.bin muss die erste Ressource in fxdata.txt sein");
+// advc.py lays out all addresses relative to the start of game.bin.
+static_assert(gameData == 0, "game.bin must be the first resource in fxdata.txt");
 
 Arduboy arduboy;
 bool greyscale = true;
 
 namespace {
-  // Spiellogik je Sekunde: Laufgeschwindigkeit, Textdauer, wait usw. sind in
-  // diesen Schritten angegeben.
+  // Logic steps per second: walking speed, text duration, wait etc. are given in
+  // these steps.
   constexpr uint8_t UPDATES_PER_SECOND = 60;
 
   enum class Mode : uint8_t { Language, Title, Play, BadData };
   Mode mode;
 
-  // Einstellungen im EEPROM: Kennbyte, Sprache, Graustufen (Platz für Spiele
-  // ab EEPROM_STORAGE_SPACE_START, Lage beliebig gewählt). Ältere Stände
-  // ohne Graustufen-Byte haben dort 0xFF: dann gilt die Vorgabe (an).
+  // Settings in EEPROM: signature byte, language, greyscale (space for games
+  // from EEPROM_STORAGE_SPACE_START, location chosen arbitrarily). Older versions
+  // without the greyscale byte have 0xFF there: then the default (on) applies.
   constexpr uint16_t EEPROM_LANG = EEPROM_STORAGE_SPACE_START + 0x1F0;
   constexpr uint16_t EEPROM_GREY = EEPROM_LANG + 2;
   constexpr uint8_t EEPROM_LANG_SIGNATURE = 0x4D;  // 'M'
@@ -62,7 +62,7 @@ namespace {
     arduboy.print(s);
   }
 
-  // Text aus dem FX-Flash, waagerecht zentriert.
+  // Text from the FX flash, centred horizontally.
   void drawCenteredFx(uint24_t address, int16_t y) {
     char buf[22];
     uint8_t len = World::readString(address, buf, sizeof(buf));
@@ -74,7 +74,7 @@ namespace {
     drawScreen(0, 0, World::header.title, World::header.titleGrey);
   }
 
-  // --- Sprachauswahl über dem Titelbild: Namen der enthaltenen Sprachen ---
+  // --- Language selection over the title image: names of the included languages ---
 
   void updateLanguage() {
     uint8_t count = World::languageCount();
@@ -107,7 +107,7 @@ namespace {
     }
   }
 
-  // --- Titel ---
+  // --- Title ---
 
   void updateTitle() {
     if (arduboy.justPressed(B_BUTTON)) {
@@ -123,14 +123,14 @@ namespace {
     }
   }
 
-  // Das Titelbild bringt das Logo mit; darunter nur eine Hinweisleiste.
+  // The title image brings the logo; below it only a hint bar.
   void drawTitle() {
     drawTitleImage();
     arduboy.fillRect(0, HEIGHT - 8, WIDTH, 8, BLACK);
     drawCenteredFx(arduboy.audio.enabled() ? World::header.uiSoundOn : World::header.uiSoundOff, HEIGHT - 8);
   }
 
-  // --- Spiel ---
+  // --- Game ---
 
   void updatePlay() {
     Script::update();
@@ -148,7 +148,7 @@ namespace {
     Ui::draw();
   }
 
-  // Ohne passende Daten gibt es keine Sprache: zweisprachiger Hinweis.
+  // Without matching data there is no language: bilingual notice.
   void drawBadData() {
     drawCentered(F("FX data missing"), 15, 4);
     drawCentered(F("or out of date."), 15, 13);
@@ -157,9 +157,9 @@ namespace {
     drawCentered(F("./build.sh"), 10, 52);
   }
 
-  // Ein Schritt Spiellogik.
+  // One logic step.
   void update() {
-    ++arduboy.frameCount;  // Animationstakt der Engine (Arduboy2 zählt sonst in nextFrame)
+    ++arduboy.frameCount;  // animation cycle of the engine (Arduboy2 otherwise counts in nextFrame)
     arduboy.pollButtons();
     switch (mode) {
       case Mode::Language:
@@ -174,11 +174,11 @@ namespace {
       case Mode::BadData:
         return;
     }
-    // Nachfüllen erst nach allen Lesevorgängen: kein FX-Zugriff offen.
+    // Refill only after all reads: no FX access open.
     Sound::update();
   }
 
-  // Eine Ebene zeichnen; Graustufen-Bilder wählen ihren Frame nach der Ebene.
+  // Draw one plane; greyscale images pick their frame by plane.
   void render() {
     switch (mode) {
       case Mode::Language:
@@ -196,10 +196,10 @@ namespace {
     }
   }
 
-  // Display und FX-Flash teilen sich den SPI-Bus; FX::begin() wählt das
-  // Display ab, und FX-Zugriffe lassen es abgewählt. ArduboyG spricht das
-  // Display direkt an – also nur für die Dauer der Übertragung auswählen,
-  // wie FX::display() es tut. Dasselbe gilt für Befehle wie invert().
+  // Display and FX flash share the SPI bus; FX::begin() deselects the
+  // display, and FX accesses leave it deselected. ArduboyG addresses the
+  // display directly – so select it only for the duration of the transfer,
+  // as FX::display() does. The same applies to commands such as invert().
   bool shownInverted;
 
   void showPlane() {
@@ -222,8 +222,8 @@ void Settings::setGreyscale(bool on) {
 
 void setup() {
   arduboy.begin();
-  // Arduboy2 beginnt mit seinem Weiß (1); für ArduboyG ist 1 Dunkelgrau –
-  // Text ohne eigene Farbe (die Sprechblasen) stünde nur in Ebene 0.
+  // Arduboy2 starts with its white (1); for ArduboyG 1 is dark grey –
+  // text without its own colour (the speech bubbles) would only be in plane 0.
   arduboy.setTextColor(WHITE);
   arduboy.setTextBackground(BLACK);
   arduboy.setUpdateHz(UPDATES_PER_SECOND);
@@ -244,9 +244,9 @@ void setup() {
 }
 
 #ifdef RENDER_TIMING
-// Entwicklung (make TIMING=1): unten rechts die längste Zeit für Spiellogik
-// und Zeichnen einer Ebene in µs, je Sekunde neu. Das Zeitfenster einer
-// Ebene ist 1 s / 156 ≈ 6400 µs abzüglich der Übertragung ans Display.
+// Development (make TIMING=1): bottom right, the longest time for game logic
+// and drawing of one plane in µs, refreshed every second. The time window of
+// one plane is 1 s / 156 ≈ 6400 µs minus the transfer to the display.
 namespace {
   uint16_t worstUs, shownUs, timingUpdates;
 

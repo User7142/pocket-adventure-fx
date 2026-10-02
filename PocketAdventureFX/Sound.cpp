@@ -1,16 +1,16 @@
 #include "Sound.h"
 
 namespace {
-  // Der Puffer muss mindestens einen Frame überbrücken. Das engste Fenster im
-  // Thema sind 16 aufeinanderfolgende Noten mit zusammen 135 ms, 32 Einträge
-  // reichen also mit großem Abstand.
-  constexpr uint8_t RING_SIZE = 32;  // Zweierpotenz
+  // The buffer must bridge at least one frame. The tightest window in the
+  // theme is 16 consecutive notes totalling 135 ms, so 32 entries
+  // are more than enough.
+  constexpr uint8_t RING_SIZE = 32;  // power of two
   constexpr uint8_t RING_MASK = RING_SIZE - 1;
 
   NoteRec ring[RING_SIZE];
-  volatile uint8_t head;       // schreibt nur update()
-  volatile uint8_t tail;       // schreibt nur der Interrupt
-  volatile uint8_t remaining;  // Rest-Millisekunden der laufenden Note
+  volatile uint8_t head;       // written only by update()
+  volatile uint8_t tail;       // written only by the interrupt
+  volatile uint8_t remaining;  // remaining milliseconds of the current note
   volatile uint16_t currentOcr;
   volatile bool active;
 
@@ -28,11 +28,11 @@ void Sound::begin(uint24_t musicTable, uint8_t musicCount) {
   table = musicTable;
   trackCount = musicCount;
 
-  // Timer3: CTC, Takt/8 = 2 MHz, Pin-Toggle wird pro Note zugeschaltet.
+  // Timer3: CTC, clock/8 = 2 MHz, pin toggle is enabled per note.
   TCCR3A = 0;
   TCCR3B = _BV(WGM32) | _BV(CS31);
 
-  // Timer1: CTC, Takt/64 = 250 kHz, Compare bei 250 → 1 kHz.
+  // Timer1: CTC, clock/64 = 250 kHz, compare at 250 → 1 kHz.
   TCCR1A = 0;
   TCCR1B = _BV(WGM12) | _BV(CS11) | _BV(CS10);
   OCR1A = 249;
@@ -41,7 +41,7 @@ void Sound::begin(uint24_t musicTable, uint8_t musicCount) {
 }
 
 void Sound::stop() {
-  active = false;  // ab hier rührt der Interrupt nichts mehr an
+  active = false;  // from here on the interrupt touches nothing
   currentTrack = NONE8;
   TCCR3A = 0;
   currentOcr = 0;
@@ -52,8 +52,8 @@ void Sound::stop() {
 }
 
 void Sound::play(uint8_t track) {
-  // Läuft das Stück schon, nicht von vorn beginnen – wie im Original, das vor
-  // startSound mit isSoundRunning prüft (Bar ↔ Küche).
+  // If the track is already playing, do not restart it – like the original, which
+  // checks isSoundRunning before startSound (bar ↔ kitchen).
   if (track == currentTrack && playing()) return;
   stop();
   if (track >= trackCount) return;
@@ -83,13 +83,13 @@ void Sound::update() {
       notesLeft = trackLength;
     }
     uint8_t n = free;
-    if (n > RING_SIZE - head) n = RING_SIZE - head;  // nur zusammenhängend schreiben
+    if (n > RING_SIZE - head) n = RING_SIZE - head;  // write contiguously only
     if (n > notesLeft) n = notesLeft;
     FX::readDataBytes(nextNote, reinterpret_cast<uint8_t*>(&ring[head]), n * sizeof(NoteRec));
     nextNote += uint24_t(n) * sizeof(NoteRec);
     notesLeft -= n;
     free -= n;
-    head = (head + n) & RING_MASK;  // erst nach dem Schreiben freigeben
+    head = (head + n) & RING_MASK;  // release only after writing
   }
 }
 
@@ -104,7 +104,7 @@ ISR(TIMER1_COMPA_vect) {
     return;
   }
   uint8_t t = tail;
-  if (t == head) {  // Track zu Ende oder Puffer leer
+  if (t == head) {  // track finished or buffer empty
     TCCR3A = 0;
     currentOcr = 0;
     return;
@@ -116,8 +116,8 @@ ISR(TIMER1_COMPA_vect) {
   if (!ocr) {
     TCCR3A = 0;
   } else if (ocr != currentOcr) {
-    // Zähler zurücksetzen: Läge TCNT3 schon über dem neuen OCR3A, liefe
-    // er erst bis 0xFFFF und es gäbe einen 30-ms-Aussetzer.
+    // Reset the counter: if TCNT3 were already above the new OCR3A, it would
+    // first run up to 0xFFFF, causing a 30 ms dropout.
     OCR3A = ocr;
     TCNT3 = 0;
     TCCR3A = _BV(COM3A0);

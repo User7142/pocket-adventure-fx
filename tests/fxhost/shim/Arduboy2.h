@@ -1,10 +1,10 @@
-// Host-Nachbildung des Arduboy2-API: nur, was die Engine benutzt. Gezeichnet
-// wird in host::screen; Tasten setzt der Prüfstand (host::buttons).
+// Host stand-in for the Arduboy2 API: only what the engine uses. Drawing
+// goes to host::screen; keys are set by the test bench (host::buttons).
 #pragma once
 
 constexpr int16_t WIDTH = 128;
 constexpr int16_t HEIGHT = 64;
-// Wie im Original Makros: ArduboyG ersetzt sie durch seine Graustufen.
+// Macros as in the original: ArduboyG replaces them with its greyscale.
 #define BLACK 0
 #define WHITE 1
 constexpr uint8_t LEFT_BUTTON = 0x20, RIGHT_BUTTON = 0x40, UP_BUTTON = 0x80, DOWN_BUTTON = 0x10,
@@ -17,7 +17,7 @@ class __FlashStringHelper;
 #define pgm_read_byte(p) (*reinterpret_cast<const uint8_t*>(p))
 
 namespace host {
-  extern uint8_t buttons;  // gedrückte Tasten in diesem Frame
+  extern uint8_t buttons;  // keys pressed in this frame
 }
 
 long random(long howbig);
@@ -32,9 +32,9 @@ class Arduboy2Audio {
 };
 
 namespace host {
-  extern uint8_t screen[WIDTH * HEIGHT / 8];  // Bildpuffer im Arduboy-Layout (Seiten à 8 Zeilen)
-  extern const uint8_t font5x7[];             // aus der Arduboy2-Bibliothek (Makefile)
-  extern bool inverted;                       // Display invertiert (Arduboy2::invert)
+  extern uint8_t screen[WIDTH * HEIGHT / 8];  // frame buffer in Arduboy layout (pages of 8 rows)
+  extern const uint8_t font5x7[];             // from the Arduboy2 library (Makefile)
+  extern bool inverted;                       // display inverted (Arduboy2::invert)
   inline void pixel(int16_t x, int16_t y, uint8_t color) {
     if (x < 0 || x >= WIDTH || y < 0 || y >= HEIGHT) return;
     uint8_t& b = screen[(y / 8) * WIDTH + x];
@@ -43,8 +43,8 @@ namespace host {
   }
 }
 
-// Wie Print des Arduino-Kerns: Texte landen im virtuellen write(Puffer, n),
-// das ohne Überschreiben Zeichen für Zeichen write(c) aufruft.
+// Like Print of the Arduino core: texts end up in the virtual write(buffer, n),
+// which, unless overridden, calls write(c) character by character.
 class Print {
  public:
   virtual ~Print() = default;
@@ -67,7 +67,7 @@ class Arduboy2 : public Print {
   bool pressed(uint8_t b) { return (current & b) == b; }
   bool justPressed(uint8_t b) { return (current & b) && !(previous & b); }
 
-  // Text mit Textzustand wie in Arduboy2 (Cursor, Farben, Umbruch).
+  // Text with text state as in Arduboy2 (cursor, colours, wrapping).
   void setCursor(int16_t x, int16_t y) { cursor_x = x; cursor_y = y; }
   void setTextColor(uint8_t c) { textColor = c; }
   void setTextBackground(uint8_t c) { textBackground = c; }
@@ -84,8 +84,8 @@ class Arduboy2 : public Print {
     }
     return 1;
   }
-  // Wie Arduboy2::drawChar (Textgröße 1): Pixel für Pixel. Bleibt hier als
-  // Vorlage, an der der Prüfstand die schnelle Ausgabe der Engine misst.
+  // Like Arduboy2::drawChar (text size 1): pixel by pixel. Stays here as the
+  // reference against which the test bench measures the engine's fast output.
   static void drawChar(int16_t x, int16_t y, uint8_t c, uint8_t color, uint8_t bg) {
     bool drawBackground = bg != color;
     for (uint8_t i = 0; i < fullCharacterWidth; ++i) {
