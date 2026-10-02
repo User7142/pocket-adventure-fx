@@ -1,0 +1,82 @@
+#!/usr/bin/env python3
+"""Packt Sketch und FX-Daten in ein .arduboy-Paket.
+
+Format (Schema 4, wie es Arduboy Toolset und Cart-Editoren lesen): ein ZIP
+mit info.json, dem Sketch als Intel-HEX, den FX-Daten und einem Cart-Bild
+(128×64, hier das Titelbild). Die FX-Datenseite trägt der Cart-Builder selbst
+ins Programm ein; die Engine liest sie über FX::begin().
+
+Das Paket entsteht aus der eigenen Originalkopie und enthält deren Grafiken
+und Texte – es ist nur für den eigenen Gebrauch, nicht zum Weitergeben.
+"""
+import argparse
+import datetime
+import json
+import sys
+import zipfile
+from pathlib import Path
+
+from PIL import Image
+
+TITLE = "Pocket Adventure FX"
+
+
+def languages(game_bin):
+    """Namen der Sprachen aus dem Sprachverzeichnis am Anfang von game.bin
+    (advc.py: LangDir u16 magic, u16 build, u8 Anzahl; je LangEntry u24 Name,
+    u24 Header)."""
+    data = game_bin.read_bytes()
+    if int.from_bytes(data[0:2], "little") != 0x464D:
+        raise ValueError(f"{game_bin}: kein Spieldatenblock von advc.py")
+    names = []
+    for i in range(data[4]):
+        at = int.from_bytes(data[5 + 6 * i:8 + 6 * i], "little")
+        names.append(data[at:data.index(0, at)].decode("cp437"))
+    return ", ".join(names)
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--hex", type=Path, required=True)
+    ap.add_argument("--data", type=Path, required=True, help="FX-Daten (fxdata-data.bin)")
+    ap.add_argument("--cart", type=Path, required=True, help="Cart-Bild 128×64 (Titelbild)")
+    ap.add_argument("--game", type=Path, required=True, help="game.bin (für die Sprachliste)")
+    ap.add_argument("--out", type=Path, required=True)
+    args = ap.parse_args()
+
+    langs = languages(args.game)
+    cart = Image.open(args.cart).convert("1")
+    if cart.size != (128, 64):
+        print(f"{args.cart}: Cart-Bild muss 128×64 sein, nicht {cart.size}", file=sys.stderr)
+        return 1
+
+    info = {
+        "schemaVersion": 4,
+        "title": TITLE,
+        "description": "Unofficial demake of The Secret of Monkey Island for the Arduboy FX, "
+                       f"built from your own copy of the original game. Languages: {langs}.",
+        "version": "1.0",
+        "date": datetime.date.today().isoformat(),
+        "genre": "Adventure",
+        "binaries": [{
+            "title": TITLE,
+            "filename": "PocketAdventureFX.hex",
+            "flashdata": "PocketAdventureFX-data.bin",
+            "device": "ArduboyFX",
+            "cartimage": "cart.png",
+        }],
+    }
+
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(args.out, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("info.json", json.dumps(info, indent=2, ensure_ascii=False))
+        z.write(args.hex, "PocketAdventureFX.hex")
+        z.write(args.data, "PocketAdventureFX-data.bin")
+        with z.open("cart.png", "w") as f:
+            cart.save(f, "PNG")
+    print(f"package: {args.out} ({args.out.stat().st_size} Bytes, {langs})")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

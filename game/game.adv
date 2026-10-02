@@ -1,0 +1,2175 @@
+# Pocket Adventure FX – Spielbeschreibung (die ersten Szenen von „The Secret of Monkey Island“, Teil 1)
+#
+# Sprache und Befehle: siehe README.md, Abschnitt „Skriptsprache“.
+#
+# Diese Datei enthält keine Texte, Grafiken oder Musik des Originals, nur
+# Verweise darauf. Beim Bauen kommen sie aus der eigenen Originalkopie
+# (VGA-Diskettenversion), die Texte aus jeder angegebenen Sprachfassung:
+#   r38.s203#1    erster Text in Skript 203 von Raum 38
+#   o498.name     Name von Objekt 498
+#   s22#10        Text in globalem Skript 22 (hier: die Verbnamen)
+# Liste aller Texte einer Kopie: tools/scumm_text.py <Kopie> [--filter r38.]
+# Mit :N nur die N-te Sprechblase eines Originaltexts (r38.s202#41:2).
+#
+# Abläufe und Zeilen folgen den Originalskripten (Bezug jeweils im
+# Kommentar), gekürzt auf das, was auf 128×64 Pixeln und 2,5 KB RAM geht.
+# Koordinaten: Raumpixel nach der Verkleinerung auf 64 px Höhe
+# (Original × 64/144), y = Fußlinie der Figuren.
+
+# Titel: Mêlée Island bei Nacht (Raum 10) mit dem Logo (Objekt 113)
+title original 10 overlay 113 48 24 crop 40 16 280 144 tone 40 120 contrast 0.6 music theme
+cursor "art/ui/cursor.png"
+inventoryverb look
+
+# --- Musik -----------------------------------------------------------------
+# Melodiestimme der AdLib-Fassungen. Sound 110 ist das Titelthema (das
+# Startskript s1 wählt es für AdLib-Rechner); sein Anfang ist ein 20 s langer
+# Klangteppich, die Melodie setzt nach rund 25 s ein. Sound 108 spielt der
+# Ausguck beim ersten Besuch, Sound 101 läuft in der SCUMM Bar; das Dock ist
+# still (alles wie in den Originalskripten).
+music theme original 110 channel 0 start 25200
+music lookout_music original 108
+music bar_music original 101
+# Kapitelkarte „Teil 1“: Raum 96 spielt Var[81] (AdLib: Sound 104) bis zum Ende
+# Die Melodie setzt erst nach 2,2 s ein; bis dahin spielt der Lautsprecher die
+# Einleitungsfigur der Begleitung (Kanal 1), sonst wäre es so lange still.
+music part1_music original 104 lead 1
+# Geisterschiff (s117, Var[76] = Sound 100): Die Melodie ist Kanal 3; die
+# automatische Wahl träfe Kanal 0, eine Akkordstimme, die einstimmig zerfällt.
+music ghost_music original 100 channel 3
+# Karte von Mêlée (r85.en startet Var[89], AdLib: Sound 112; r85.ex stoppt sie)
+music map_music original 112 channel 1
+
+# --- Kapitelkarte ------------------------------------------------------------
+# Raum 96: Vollbild mit eingezeichnetem Text, je Sprachfassung eigenes Bild.
+# Die Treppe am Ausguck lädt ihn beim ersten Abstieg (o494, Bit 395), danach
+# geht es zum Dock.
+card part1 original 96 music part1_music
+
+# --- Verben (Reihenfolge = Menü; das erste muss walk sein) -------------------
+# Namen aus dem Verbskript s22 des Originals.
+verb walk   s22#5
+verb open   s22#1
+verb close  s22#2
+verb give   s22#8 prep s22#28
+verb pickup s22#6
+verb look   s22#10
+verb talk   s22#7
+verb push   s22#3
+verb pull   s22#4
+verb use    s22#9 prep s22#26
+
+# Standardantworten aus s3, dem Skript des Originals für Sätze ohne eigene
+# Antwort des Objekts.
+default look
+  say guybrush s3#4
+end
+default pickup
+  say guybrush s3#5
+end
+default open
+  say guybrush s3#2
+end
+default close
+  say guybrush s3#7
+end
+default talk
+  say guybrush s3#7
+end
+default push
+  say guybrush s3#3
+end
+default pull
+  say guybrush s3#3
+end
+default use
+  say guybrush s3#7
+end
+default give
+  say guybrush s3#7
+end
+
+# --- Figuren ---------------------------------------------------------------
+# Der erste Actor ist die Spielfigur. Kostüme aus dem Original: 1 = Guybrush,
+# 33 = der Ausguck, 26 = der Koch. Etwas größer als die Kulisse (0,55 statt
+# 0,44), damit die Figuren auf 1 Bit lesbar bleiben.
+# depth: kleiner, je weiter hinten er steht (Skalierung der Laufflächen, etwa
+# in der Stadtstraße und am Dock); die anderen Figuren ignorieren im Original
+# die Laufflächen (Klasse 22) und bleiben gleich groß.
+actor guybrush costume 1 scale 0.55 depth
+# Auf der Karte von Mêlée trägt Guybrush die kleine Kartenfigur (r85.en: costume 3)
+actor guybrush_map costume 3 scale 1.2
+actor lookout  costume 33 scale 0.55 dark 75   # grauer Mantel: höhere Schwelle
+actor cook     costume 26 scale 0.55 object cook_obj
+# Die drei wichtig aussehenden Piraten: ein Actor mit Kostüm 24 (r28.s204)
+actor leaders  costume 24 scale 0.55
+# Geisterschiff (s117): LeChuck = Kostüm 32, der Geisterpirat = Kostüm 54
+actor lechuck  costume 32 scale 0.55 dark 15   # dunkelblau: sonst ganz schwarz
+# Voodoo-Lady (r29.s201): Kostüm 15
+actor voodoo   costume 15 scale 0.55
+# Stadtstraße (r35.en, s200): die drei Piraten an der Ecke mit Papagei
+# (Kostüm 41, ein Actor), ihre Ratte (42) und der Kartenverkäufer (14)
+actor men      costume 41 scale 0.55
+actor rat      costume 42 scale 0.55
+actor citizen  costume 14 scale 0.55
+actor ghost    costume 54 scale 0.55
+
+# --- Start: Ankunft beim Ausguck (r38.s203) ---------------------------------
+# Guybrush kommt den Pfad herauf, stellt sich vor, verabschiedet sich, fragt
+# noch einmal nach der SCUMM Bar und geht über die Treppe hinunter zum Dock.
+start
+  # Anfangszustand: das zweite Huhn-Objekt (o391#2) erscheint erst, wenn er das Huhn ansieht
+  hide rubber_chicken
+  room lookout at 141 31 face left
+  walk guybrush 62 47
+  face guybrush left
+  say guybrush r38.s203#1
+  say lookout r38.s203#2
+  say guybrush r38.s203#3
+  face lookout right
+  say lookout r38.s203#4
+  say guybrush r38.s203#5
+  say lookout r38.s203#6
+  say lookout r38.s203#7
+  say guybrush r38.s203#8
+  say lookout r38.s203#9
+  walk guybrush 104 50
+  say guybrush r38.s203#10
+  say lookout r38.s203#11
+  say guybrush r38.s203#12
+  card part1
+  room dock at 4 34 face right
+  walk guybrush 30 57
+end
+
+# --- Ausguck ---------------------------------------------------------------
+# r38.s141: Der Ausguck merkt sich den Namen falsch. Aus dem Nachnamen (s141#1) wird
+# zufällig etwas anderes; '@' (64) füllt auf und wird nicht gezeigt.
+string lookout_name original 30
+
+# r38.s202: das spätere Gespräch mit dem Ausguck. Erst etwas Smalltalk, dann
+# erschrickt er; danach geht es um Guybrushs Namen, bis er fragt, wer der
+# Ausguck ist – ab da gilt das zweite Menü. Hat Guybrush ihn nach dem
+# Gouverneur und nach seiner Blindheit gefragt, ist der Ausguck künftig
+# beschäftigt. Merker, die im Original nur für ein Gespräch gelten
+# (lk_over, lk_quiet, lk_offer), setzt das Gespräch zu Beginn zurück.
+object old_man o498.name
+  on look
+    say guybrush o498#1
+  end
+  on talk
+    if lk_busy
+      face lookout front
+      say lookout r38.s202#4
+    else
+      clear lk_over
+      clear lk_quiet
+      clear lk_offer
+      face lookout front
+      choose
+        option r38.s202#5
+          say guybrush r38.s202#5
+          done
+        option r38.s202#6
+          say guybrush r38.s202#6
+          done
+        option r38.s202#7
+          say guybrush r38.s202#7
+          done
+        option r38.s202#8
+          say guybrush r38.s202#8
+          done
+        option r38.s202#9 if lk_who
+          say guybrush r38.s202#9
+          done
+      end
+      say lookout r38.s202#10
+      if lk_met
+        setstring lookout_name s141#1
+        random
+        case
+          setchar lookout_name 5 98
+        case
+          setchar lookout_name 5 100
+        case
+          setchar lookout_name 5 102
+        case
+          setchar lookout_name 5 107
+        case
+          setchar lookout_name 5 109
+        case
+          setchar lookout_name 5 110
+        case
+          setchar lookout_name 5 116
+        case
+          setchar lookout_name 5 122
+        end
+        random
+        case
+        case
+          setchar lookout_name 3 111
+          setchar lookout_name 4 111
+        case
+          setchar lookout_name 3 97
+          setchar lookout_name 4 64
+        case
+          setchar lookout_name 3 117
+          setchar lookout_name 4 64
+        case
+          setchar lookout_name 5 64
+        case
+          setchar lookout_name 2 117
+          setchar lookout_name 3 109
+          setchar lookout_name 4 112
+          setchar lookout_name 5 64
+        end
+        random
+        case
+        case
+          setchar lookout_name 8 114
+        case
+          setchar lookout_name 7 97
+          setchar lookout_name 8 108
+        case
+          setchar lookout_name 7 105
+          setchar lookout_name 8 110
+        end
+        random
+        case
+          setchar lookout_name 9 107
+        case
+        case
+        case
+        end
+        say lookout r38.s202#11
+        set lk_quiet
+        set lk_offer
+      else
+        say lookout r38.s202#12
+        say lookout r38.s202#13
+      end
+      if not lk_who
+        choose
+          option r38.s202#14 if not lk_named and not lk_squinky
+            say guybrush r38.s202#14
+            set lk_named
+            say guybrush r38.s202#22
+            say lookout r38.s202#23
+            say lookout r38.s202#24
+            if lk_squinky
+              say lookout r38.s202#25
+            end
+            clear lk_quiet
+          option r38.s202#15 if not lk_named and lk_squinky
+            say guybrush r38.s202#15
+            set lk_named
+            say guybrush r38.s202#22
+            say lookout r38.s202#23
+            say lookout r38.s202#24
+            if lk_squinky
+              say lookout r38.s202#25
+            end
+            clear lk_quiet
+          option r38.s202#16 if lk_named and not lk_quiet
+            say guybrush r38.s202#16
+            set lk_quiet
+            say lookout r38.s202#46
+            say lookout r38.s202#47
+          option r38.s202#17 if not lk_squinky
+            say guybrush r38.s202#17
+            set lk_squinky
+            set lk_quiet
+            if not lk_named
+              say lookout r38.s202#26
+            else
+              say lookout r38.s202#27
+              say guybrush r38.s202#28
+              say lookout r38.s202#29
+            end
+          option r38.s202#18 if not lk_over
+            say guybrush r38.s202#18
+            set lk_over
+            face lookout right
+            say lookout r38.s202#30
+          option r38.s202#19
+            say guybrush r38.s202#19
+            set lk_who
+            set lk_quiet
+            say lookout r38.s202#31
+            face lookout left
+            say lookout r38.s202#32
+            if lk_over
+              face lookout right
+            else
+              face lookout front
+            end
+            say lookout r38.s202#33
+            done
+          option r38.s202#21
+            say guybrush r38.s202#21
+            done
+        end
+      end
+      if lk_who
+        choose
+          option r38.s202#35 if lk_offer
+            say guybrush r38.s202#35
+            clear lk_offer
+            say lookout r38.s202#44
+            random
+            case
+            case
+              say lookout r38.s202#45
+            end
+          option r38.s202#36 if not lk_quiet
+            say guybrush r38.s202#36
+            clear lk_offer
+            set lk_quiet
+            say lookout r38.s202#46
+            say lookout r38.s202#47
+          option r38.s202#37 if not lk_gov
+            say guybrush r38.s202#37
+            clear lk_offer
+            set lk_gov
+            set lk_quiet
+            say lookout r38.s202#41
+          option r38.s202#38 if not lk_blind
+            say guybrush r38.s202#38
+            clear lk_offer
+            set lk_blind
+            set lk_quiet
+            say lookout r38.s202#42
+          option r38.s202#39 if not lk_over
+            say guybrush r38.s202#39
+            clear lk_offer
+            set lk_over
+            face lookout right
+            say lookout r38.s202#43
+          option r38.s202#40
+            say guybrush r38.s202#40
+            done
+        end
+      end
+      if lk_gov and lk_blind
+        set lk_busy
+      end
+      say lookout r38.s202#49
+      face lookout left
+      set lk_met
+    end
+  end
+end
+
+object stairs o494.name
+  on walk
+    # o494: unten am Dock (346,133 im Original)
+    room dock at 4 34 face right
+    walk guybrush 154 59
+  end
+end
+
+# o496: der Pfad hinunter zur Karte der Insel (Raum 85)
+object path o496.name
+  on walk
+    costume guybrush guybrush_map
+    room map at 49 76 face front
+  end
+end
+
+# --- Dock -------------------------------------------------------------------
+object cliffside o435.name
+  on walk
+    room lookout at 114 74 face left
+    walk guybrush 104 50
+  end
+end
+
+object poster o438.name
+  on look
+    say guybrush o438#5
+  end
+end
+
+# Türen muss man wie im Original erst öffnen. Jede Tür ist ein Objektpaar,
+# eins je Raum (o437/o322, o323/o894); Zustand 1 = offen.
+object bar_entrance o437.name
+  on open
+    state bar_entrance 1
+    state bar_door 1
+  end
+  on close
+    state bar_entrance 0
+    state bar_door 0
+  end
+  on walk
+    if bar_entrance open
+      room scummbar at 30 54 face right
+    end
+  end
+end
+
+object archway o436.name
+  on walk
+    # Torbogen zur Stadt (o436): Raum 35 am rechten Torbogen
+    room street at 194 48 face left
+    walk guybrush 184 58
+  end
+end
+
+# --- SCUMM Bar -----------------------------------------------------------------
+object bar_door o322.name
+  on open
+    state bar_door 1
+    state bar_entrance 1
+  end
+  on close
+    state bar_door 0
+    state bar_entrance 0
+  end
+  on walk
+    if bar_door open
+      if not seen_ghostship
+        # Beim ersten Verlassen der Bar (o322, Bit 446): s117
+        set seen_ghostship
+        room meanwhile
+        wait 60
+        say narrator s117#1
+        room ghostship
+        music ghost_music
+        say narrator s117#3
+        room ghostcabin
+        put lechuck 54 52
+        face lechuck left
+        put ghost 169 52
+        face ghost left
+        wait 60
+        walk ghost 93 52
+        say ghost s117#5
+        say lechuck s117#6
+        say ghost s117#7
+        walk lechuck 70 52
+        say lechuck s117#8
+        say ghost s117#9
+        say lechuck s117#10
+        say ghost s117#11
+        say lechuck s117#12
+        say ghost s117#13
+        say lechuck s117#14
+        wait 30
+        walk ghost 108 52
+        wait 30
+        walk lechuck 89 52
+        face ghost left
+        say ghost s117#15
+        say ghost s117#16
+        walk ghost 120 52
+        face ghost left
+        say lechuck s117#17
+        walk lechuck 54 52
+        say lechuck s117#18
+        wait 60
+        say ghost s117#19
+        walk ghost 151 52
+        music stop
+      end
+      room dock at 318 58 face front
+    end
+  end
+end
+
+# Der Koch (r28.s211–s216): Er wartet in der Küche 30 bis 50 Sekunden (s211),
+# kommt heraus, bringt einem Piraten Grog und geht zurück (s216). Im Original
+# wählt er den Piraten zufällig; hier wechselt er zwischen einem am linken
+# Rand und einem bei den wichtig aussehenden Piraten. Wird der Ablauf neu
+# gestartet, während er draußen ist, geht er wie bei s216 von dort aus weiter.
+routine cook
+  repeat
+    if not cook_out
+      if cook_called
+        # r28.s212: nach dem Ruf an der Tür kommt er nach zehn Sekunden
+        wait 600
+        clear cook_called
+      else
+        wait random 1800 3000
+      end
+      set cook_out
+      state kitchen_door 1
+      state kitchen_exit 1
+      put cook 293 55
+      walk cook 264 56
+    end
+    if cook_far
+      clear cook_far
+      walk cook 210 57
+    else
+      set cook_far
+      walk cook 51 56
+    end
+    walk cook 264 56
+    state kitchen_door 1
+    state kitchen_exit 1
+    walk cook 293 55
+    remove cook
+    state kitchen_door 0
+    state kitchen_exit 0
+    clear cook_out
+  end
+end
+
+# Klick auf die Küchentür (r28.s203, s214, s215). Das Original sieht schon
+# beim Klick nach dem Koch, deshalb ist die Tür „direct“ platziert und die
+# Handler lassen Guybrush selbst hinlaufen:
+# - Ist der Koch draußen und weit weg (x ≤ 310 im Original), bleibt er
+#   stehen, und die Tür funktioniert normal.
+# - Ist er draußen und näher, warnt er Guybrush (s215)
+#   und serviert dann weiter (x > 520) oder geht zurück in die Küche.
+# - Ist er in der Küche und wartet (s211), öffnet er beim Öffnen die Tür,
+#   ruft von drinnen und schließt sie wieder (s214); zehn Sekunden später
+#   kommt er heraus (s212). In diesen zehn Sekunden geht die Tür auf.
+object kitchen_door o323.name
+  on open
+    if cook_out
+      if cook x < 138
+        stop cook
+        halt cook
+        walk guybrush 264 56
+        state kitchen_door 1
+        state kitchen_exit 1
+      else
+        halt cook
+        face cook right
+        say cook r28.s215#1
+        if not cook x < 231
+          start cook
+        else
+          stop cook
+          walk cook 264 56
+          state kitchen_door 1
+          state kitchen_exit 1
+          walk cook 293 55
+          remove cook
+          state kitchen_door 0
+          state kitchen_exit 0
+          clear cook_out
+          start cook
+        end
+      end
+    else
+      walk guybrush 264 56
+      if cook_called
+        state kitchen_door 1
+        state kitchen_exit 1
+      else
+        state kitchen_door 1
+        state kitchen_exit 1
+        wait 30
+        say narrator r28.s214#1
+        state kitchen_door 0
+        state kitchen_exit 0
+        set cook_called
+        start cook
+      end
+    end
+  end
+  on close
+    walk guybrush 264 56
+    state kitchen_door 0
+    state kitchen_exit 0
+  end
+  on walk
+    if cook_out
+      if cook x < 138
+        stop cook
+        halt cook
+        walk guybrush 264 56
+        if kitchen_door open
+          walk guybrush 293 54
+          room kitchen at 23 57 face right
+        end
+      else
+        halt cook
+        face cook right
+        say cook r28.s215#1
+        if not cook x < 231
+          start cook
+        else
+          stop cook
+          walk cook 264 56
+          state kitchen_door 1
+          state kitchen_exit 1
+          walk cook 293 55
+          remove cook
+          state kitchen_door 0
+          state kitchen_exit 0
+          clear cook_out
+          start cook
+        end
+      end
+    else
+      walk guybrush 264 56
+      if kitchen_door open
+        walk guybrush 293 54
+        room kitchen at 23 57 face right
+      end
+    end
+  end
+end
+
+# Der Koch selbst hat keine eigenen Verben (r28: Actor 6 ohne Objekt).
+object cook_obj r28.en#1
+end
+
+object curtain o334.name
+end
+
+object fireplace o329.name
+  on look
+    say guybrush o329#1
+  end
+  on use
+    say guybrush o329#2
+  end
+end
+
+object mug o373.name
+  on look
+    say guybrush o373#2
+  end
+  on pickup
+    pickup mug
+  end
+end
+
+# r28.s220: das Gespräch mit den wichtig aussehenden Piraten. Beim ersten
+# Mal fragen sie, was er will; nach der Antwort #14 erklären sie die
+# drei Prüfungen und es geht gleich mit den Fragen weiter. Danach beginnt
+# jedes Gespräch mit dem Gruß und den Fragen. Die Chöre (#26–28,
+# #40–42, #64–66 usw.) stehen im Original dreistimmig
+# versetzt auf dem Bild; hier erscheint jeweils die letzte Stimme.
+object leaders_obj o332.name
+  on talk
+    if told_pirate
+      say leaders r28.s220#3
+    else
+      say leaders r28.s220#12
+      choose
+        option r28.s220#13
+          say guybrush r28.s220#13
+          say leaders r28.s220#45
+          done
+        option r28.s220#14
+          say guybrush r28.s220#14
+          say leaders r28.s220#16
+          say leaders r28.s220#17
+          say leaders r28.s220#18
+          say leaders r28.s220#19
+          say leaders r28.s220#20
+          say leaders r28.s220#21
+          say leaders r28.s220#22
+          say guybrush r28.s220#23
+          say leaders r28.s220#24
+          say leaders r28.s220#25
+          say narrator r28.s220#28
+          say guybrush r28.s220#30
+          say leaders r28.s220#31
+          say leaders r28.s220#32
+          say leaders r28.s220#33
+          say leaders r28.s220#34
+          say leaders r28.s220#35
+          say leaders r28.s220#36
+          say leaders r28.s220#37
+          say leaders r28.s220#38
+          say leaders r28.s220#39
+          say narrator r28.s220#42
+          set told_pirate
+          done
+        option r28.s220#15
+          say guybrush r28.s220#15
+          say leaders r28.s220#45
+          done
+      end
+    end
+    if told_pirate
+      choose
+        option r28.s220#47 if not asked_sword
+          say guybrush r28.s220#47
+          say leaders r28.s220#59
+          say leaders r28.s220#60
+          say leaders r28.s220#61
+          say leaders r28.s220#62
+          say leaders r28.s220#63
+          say narrator r28.s220#66
+          set asked_sword
+        option r28.s220#48 if asked_sword
+          say guybrush r28.s220#48
+          say leaders r28.s220#59
+          say leaders r28.s220#60
+          say leaders r28.s220#61
+          say leaders r28.s220#68
+        option r28.s220#50 if not asked_idol
+          say guybrush r28.s220#50
+          say leaders r28.s220#69
+          say leaders r28.s220#70
+          say leaders r28.s220#71
+          say leaders r28.s220#72
+          say leaders r28.s220#73
+          say leaders r28.s220#74
+          say leaders r28.s220#75
+          set asked_idol
+        option r28.s220#51 if asked_idol
+          say guybrush r28.s220#51
+          say leaders r28.s220#72
+          say leaders r28.s220#73
+          say leaders r28.s220#74
+          say leaders r28.s220#75
+        option r28.s220#53 if not asked_treasure
+          say guybrush r28.s220#53
+          say leaders r28.s220#76
+          say leaders r28.s220#77
+          say guybrush r28.s220#78
+          say leaders r28.s220#79
+          say leaders r28.s220#80
+          say narrator r28.s220#83
+          set asked_treasure
+        option r28.s220#54 if asked_treasure
+          say guybrush r28.s220#54
+          say leaders r28.s220#77
+          say leaders r28.s220#80
+          say narrator r28.s220#83
+        option r28.s220#56 if not called_pigs
+          say guybrush r28.s220#56
+          say leaders r28.s220#88
+          set called_pigs
+        option r28.s220#57 if not asked_grog
+          say guybrush r28.s220#57
+          say leaders r28.s220#89
+          say leaders r28.s220#90
+          say leaders r28.s220#91
+          say leaders r28.s220#92
+          say leaders r28.s220#93
+          say leaders r28.s220#94
+          say leaders r28.s220#95
+          say leaders r28.s220#96
+          say leaders r28.s220#97
+          say leaders r28.s220#98
+          say leaders r28.s220#99
+          say leaders r28.s220#100
+          say leaders r28.s220#101
+          say narrator r28.s220#104
+          set asked_grog
+        option r28.s220#58
+          say guybrush r28.s220#58
+          say leaders r28.s220#106
+          say leaders r28.s220#107
+          done
+      end
+    end
+  end
+  on give mug
+    say leaders o332#1
+  end
+end
+
+object pirate_a o341.name
+  on look
+    say guybrush o341#1
+  end
+  on talk
+    say guybrush o341#1
+  end
+end
+
+object pirate_b o356.name
+  on look
+    say guybrush o356#2
+  end
+  on talk
+    say guybrush o356#1
+  end
+end
+
+object pirate_c o344.name
+  on look
+    say guybrush o344#1
+  end
+  on talk
+    say guybrush o344#1
+  end
+end
+
+object pirate_d o347.name
+  on look
+    say guybrush o347#1
+  end
+  on talk
+    say guybrush o347#1
+  end
+end
+
+# Der Hund bellt (r28.s222); gibt man ihm etwas, knurrt er (o350).
+object dog o350.name
+  on look
+    say narrator r28.s222#1
+  end
+  on talk
+    say narrator r28.s222#8
+  end
+  on give mug
+    say narrator o350#1
+    say guybrush o350#2
+  end
+end
+
+# --- Küche ---------------------------------------------------------------------
+object kitchen_exit o894.name
+  on open
+    state kitchen_exit 1
+    state kitchen_door 1
+  end
+  on close
+    state kitchen_exit 0
+    state kitchen_door 0
+  end
+  on walk
+    if kitchen_exit open
+      room scummbar at 264 56 face left
+    end
+  end
+end
+
+object meat o331.name
+  on look
+    say guybrush o331#1
+  end
+  on pickup
+    pickup meat
+  end
+end
+
+object pot o333.name
+  on look
+    say guybrush o333#1
+  end
+  on pickup
+    pickup pot
+  end
+end
+
+object fish o378.name
+  on look
+    say guybrush o378#3
+  end
+  on pickup
+    say guybrush o378#1
+  end
+end
+
+object stew o901.name
+  on look
+    say guybrush o901#1
+  end
+  on pickup
+    say guybrush o901#1
+  end
+  on push
+    say guybrush o901#1
+  end
+  on pull
+    say guybrush o901#1
+  end
+end
+
+object barrel o380.name
+  on look
+    say guybrush o380#1
+  end
+end
+
+# --- Stadtstraße (Raum 35) -----------------------------------------------------
+object street_archway o458.name
+  on walk
+    # o458: zurück zum Dock (das Ende von Teil 1 führt hier woandershin)
+    room dock at 441 51 face left
+  end
+end
+
+# o459: Torbogen zur Hauptstraße (Raum 34) – nicht in dieser Fassung
+object high_street o459.name
+  on walk
+    say narrator ui.not_included
+  end
+end
+
+object sign o451.name
+  on look
+    say guybrush o451#1
+  end
+end
+
+# r35.s210: Die Uhr zeigt immer zehn Uhr. Der Kommentar ändert sich, wenn
+# Guybrush die Straße verlassen hat und wiederkommt (Var[247], gezählt beim
+# Verlassen, sofern er hingesehen hat).
+object clock o457.name
+  on look
+    if clock_visits = 0
+      say guybrush r35.s210#1
+    else
+      if clock_visits = 1
+        say guybrush r35.s210#2
+      else
+        say guybrush r35.s210#3
+        random
+        case
+          say guybrush r35.s210#4
+        case
+        case
+        case
+        case
+        case
+        end
+      end
+    end
+    set clock_looked
+  end
+end
+
+# Tür zum Laden der Voodoo-Lady (o452/o381, ein Türpaar)
+object shop_door o452.name
+  on open
+    state shop_door 1
+    state voodoo_door 1
+  end
+  on close
+    state shop_door 0
+    state voodoo_door 0
+  end
+  on walk
+    if shop_door open
+      room voodoo at 48 45 face right
+      walk guybrush 54 47
+      state shop_door 0
+      state voodoo_door 0
+    end
+  end
+end
+
+# r35.s206/s207: Hinter den vier Haustüren (o453–o456) verschwindet Guybrush
+# und kommt aus einer anderen wieder heraus. Welche Tür wohin führt, würfelt
+# s206 beim ersten Mal aus; die Gewichte unten sind die Wahrscheinlichkeiten
+# seines Verfahrens (in 36steln).
+sub door_mapping
+  random
+  case 2
+    let door_a_to 0
+    let door_b_to 2
+    let door_c_to 3
+    let door_d_to 1
+  case 3
+    let door_a_to 0
+    let door_b_to 3
+    let door_c_to 1
+    let door_d_to 2
+  case 4
+    let door_a_to 1
+    let door_b_to 0
+    let door_c_to 3
+    let door_d_to 2
+  case 2
+    let door_a_to 1
+    let door_b_to 2
+    let door_c_to 3
+    let door_d_to 0
+  case 3
+    let door_a_to 1
+    let door_b_to 3
+    let door_c_to 0
+    let door_d_to 2
+  case 4
+    let door_a_to 2
+    let door_b_to 0
+    let door_c_to 3
+    let door_d_to 1
+  case 3
+    let door_a_to 2
+    let door_b_to 3
+    let door_c_to 0
+    let door_d_to 1
+  case 3
+    let door_a_to 2
+    let door_b_to 3
+    let door_c_to 1
+    let door_d_to 0
+  case 6
+    let door_a_to 3
+    let door_b_to 0
+    let door_c_to 1
+    let door_d_to 2
+  case 3
+    let door_a_to 3
+    let door_b_to 2
+    let door_c_to 0
+    let door_d_to 1
+  case 3
+    let door_a_to 3
+    let door_b_to 2
+    let door_c_to 1
+    let door_d_to 0
+  end
+end
+
+sub door_a_in
+  if not doors_mixed
+    set doors_mixed
+    call door_mapping
+  end
+  state house_door_a 1
+  wait 15
+  remove guybrush
+  state house_door_a 0
+  wait 30
+  if door_a_to = 0
+    call door_a_out
+  end
+  if door_a_to = 1
+    call door_b_out
+  end
+  if door_a_to = 2
+    call door_c_out
+  end
+  if door_a_to = 3
+    call door_d_out
+  end
+end
+
+sub door_b_in
+  if not doors_mixed
+    set doors_mixed
+    call door_mapping
+  end
+  state house_door_b 1
+  wait 15
+  remove guybrush
+  state house_door_b 0
+  wait 30
+  if door_b_to = 0
+    call door_a_out
+  end
+  if door_b_to = 1
+    call door_b_out
+  end
+  if door_b_to = 2
+    call door_c_out
+  end
+  if door_b_to = 3
+    call door_d_out
+  end
+end
+
+sub door_c_in
+  if not doors_mixed
+    set doors_mixed
+    call door_mapping
+  end
+  state house_door_c 1
+  wait 15
+  remove guybrush
+  state house_door_c 0
+  wait 30
+  if door_c_to = 0
+    call door_a_out
+  end
+  if door_c_to = 1
+    call door_b_out
+  end
+  if door_c_to = 2
+    call door_c_out
+  end
+  if door_c_to = 3
+    call door_d_out
+  end
+end
+
+sub door_d_in
+  if not doors_mixed
+    set doors_mixed
+    call door_mapping
+  end
+  state house_door_d 1
+  wait 15
+  remove guybrush
+  state house_door_d 0
+  wait 30
+  if door_d_to = 0
+    call door_a_out
+  end
+  if door_d_to = 1
+    call door_b_out
+  end
+  if door_d_to = 2
+    call door_c_out
+  end
+  if door_d_to = 3
+    call door_d_out
+  end
+end
+
+sub door_a_out
+  pan 59
+  state house_door_a 1
+  wait 15
+  put guybrush 59 36
+  face guybrush front
+  wait 15
+  state house_door_a 0
+end
+
+sub door_b_out
+  pan 83
+  state house_door_b 1
+  wait 15
+  put guybrush 83 36
+  face guybrush front
+  wait 15
+  state house_door_b 0
+end
+
+sub door_c_out
+  pan 92
+  state house_door_c 1
+  wait 15
+  put guybrush 92 37
+  face guybrush front
+  wait 15
+  state house_door_c 0
+end
+
+sub door_d_out
+  pan 172
+  state house_door_d 1
+  wait 15
+  put guybrush 172 48
+  face guybrush front
+  wait 15
+  state house_door_d 0
+end
+
+object house_door_a o453.name
+  on open
+    call door_a_in
+  end
+  on use
+    call door_a_in
+  end
+end
+object house_door_b o454.name
+  on open
+    call door_b_in
+  end
+  on use
+    call door_b_in
+  end
+end
+object house_door_c o455.name
+  on open
+    call door_c_in
+  end
+  on use
+    call door_c_in
+  end
+end
+object house_door_d o456.name
+  on open
+    call door_d_in
+  end
+  on use
+    call door_d_in
+  end
+end
+
+# --- Leute in der Stadtstraße ------------------------------------------------
+# Geld (o497): das Original führt den Betrag in Var[194]; Name und Text
+# setzen ihn ein (o497#4).
+number money original 194
+# Der Papagei der Piraten krächzt (r35.s217#1) mit zwei zufälligen Buchstaben
+# (r35.s217, String 26).
+string squawk original 26
+
+object money_obj o497#4
+  on look
+    if money = 1
+      say guybrush o497#1
+    else
+      say guybrush o497#2
+    end
+  end
+end
+
+object minutes o472.name
+  on look
+    say guybrush o472#1
+  end
+end
+
+sub squawk
+  setstring squawk r35.s217#1
+  let letter random 97 122
+  setchar squawk 3 letter
+  let letter random 97 122
+  setchar squawk 4 letter
+  say men r35.s217#2
+end
+
+# r35.s214/s215: Kommt Guybrush der Ratte nahe und zeigt auf sie, warnen
+# die Piraten; beim fünften Mal läuft die Ratte davon (Var[234] = 5).
+routine rat_watch
+  repeat
+    wait 1
+    if not hover rat_obj
+      set rat_armed
+    end
+    if rat_armed and hover rat_obj and guybrush x < 76 and guybrush y > 48
+      clear rat_armed
+      add rat_count 1
+      play rat_warning
+    end
+  end
+end
+
+cutscene rat_warning
+  if rat_count = 1
+    say men r35.s215#1
+  end
+  if rat_count = 2
+    say men r35.s215#2
+  end
+  if rat_count = 3
+    say men r35.s215#3
+  end
+  if rat_count = 4
+    say men r35.s215#4
+    say men r35.s215#5
+  end
+  if rat_count = 5
+    walk rat 178 60
+    face guybrush left
+    say men r35.s215#6
+    remove rat
+    stop rat_watch
+  end
+end
+
+# r35.s201: Der Papagei des Kartenverkäufers krächzt alle 13 bis 17 Sekunden,
+# solange die Kamera links ist.
+routine braak_watch
+  repeat
+    wait random 800 1000
+    if guybrush x < 80
+      play braak
+    end
+  end
+end
+
+cutscene braak
+  say narrator r35.s201#1
+end
+
+object rat_obj o461.name
+end
+
+# r35.s216: das Gespräch mit den Piraten. Teile, die das Original von
+# mehreren Stellen anspringt, sind Unterprogramme; men_bye beendet das
+# Gespräch aus ihnen heraus.
+object men_obj o460.name
+  on look
+    say men o460#1
+  end
+  on talk
+    clear men_bye
+    choose
+      option r35.s216#2 if not m_rats and m_insulted
+        say guybrush r35.s216#2
+        call rat_story
+        if men_bye
+          done
+        end
+      option r35.s216#5 if not m_rats and not m_insulted and rat_count < 5
+        say guybrush r35.s216#5
+        call rat_question
+        if men_bye
+          done
+        end
+      option r35.s216#6 if not m_rats and not m_insulted and rat_count < 5
+        say guybrush r35.s216#6
+        call rat_insult
+        if men_bye
+          done
+        end
+      option r35.s216#3 if not m_rats and not m_insulted and not rat_count < 5
+        say guybrush r35.s216#3
+        call rat_question
+        if men_bye
+          done
+        end
+      option r35.s216#4 if not m_rats and not m_insulted and not rat_count < 5
+        say guybrush r35.s216#4
+        call rat_insult
+        if men_bye
+          done
+        end
+      option r35.s216#7 if not m_map and met_citizen
+        say guybrush r35.s216#7
+        call minutes_offer
+        if men_bye
+          done
+        end
+      option r35.s216#8 if not m_map and not met_citizen
+        say guybrush r35.s216#8
+        call minutes_offer
+        if men_bye
+          done
+        end
+      option r35.s216#9 if m_map and not has minutes
+        say guybrush r35.s216#9
+        call minutes_deal
+      option r35.s216#10 if not m_circus and m_pirates
+        say guybrush r35.s216#10
+        call keg_menu
+        if men_bye
+          done
+        end
+      option r35.s216#11 if not m_circus and not m_pirates
+        say guybrush r35.s216#11
+        set m_pirates
+        wait 60
+        say men r35.s216#56
+        wait 60
+        if rat_count < 5
+          say men r35.s216#57
+        else
+          say men r35.s216#58
+        end
+        say men r35.s216#59
+        call squawk
+        say men r35.s216#60
+        call keg_menu
+        if men_bye
+          done
+        end
+      option r35.s216#13
+        say guybrush r35.s216#13
+        done
+    end
+  end
+end
+
+# 0C59: die Geschichte von den Ratten, die ein Schiff segelten – oder Affen
+sub rat_story
+  set m_rats
+  say men r35.s216#41
+  say men r35.s216#42
+  wait 30
+  call squawk
+  say men r35.s216#43
+  wait 30
+  say men r35.s216#44
+  say men r35.s216#45
+  say men r35.s216#46
+  choose
+    option r35.s216#47
+      say guybrush r35.s216#47
+      say men r35.s216#51
+      done
+    option r35.s216#48
+      say guybrush r35.s216#48
+      say men r35.s216#52
+      done
+    option r35.s216#49
+      say guybrush r35.s216#49
+      say men r35.s216#53
+      done
+    option r35.s216#50
+      say guybrush r35.s216#50
+      set men_bye
+      done
+  end
+  if not men_bye
+    say men r35.s216#54
+    wait 30
+    say men r35.s216#55
+  end
+end
+
+# 0964: die Frage nach Ratten (#29)
+sub rat_question
+  say men r35.s216#29
+  choose
+    option r35.s216#30
+      say guybrush r35.s216#30
+      call rat_story
+      done
+    option r35.s216#31
+      say guybrush r35.s216#31
+      call rat_story
+      done
+    option r35.s216#32
+      say guybrush r35.s216#32
+      set m_insulted
+      say men r35.s216#34
+      call squawk
+      set men_bye
+      done
+    option r35.s216#33
+      say guybrush r35.s216#33
+      set men_bye
+      done
+  end
+end
+
+# 0B62: Er hat die Ratte beleidigt. Ist sie noch da, antwortet sie selbst.
+sub rat_insult
+  set m_insulted
+  if rat_count < 5
+    say rat r35.s216#36
+    say rat r35.s216#37
+    wait 30
+    say men r35.s216#38
+  else
+    say men r35.s216#35
+  end
+  say men r35.s216#39
+  say men r35.s216#98
+  say men r35.s216#99
+  call squawk
+  set men_bye
+end
+
+# 056B: die angebotenen Karten sind in Wahrheit ein Sitzungsprotokoll (o472)
+sub minutes_offer
+  set m_map
+  say men r35.s216#18
+  say men r35.s216#19
+  wait 120
+  say men r35.s216#20
+  say men r35.s216#21
+  wait 60
+  call squawk
+  say men r35.s216#22
+  choose
+    option r35.s216#24
+      say guybrush r35.s216#24
+      say men r35.s216#27
+      done
+    option r35.s216#25
+      say guybrush r35.s216#25
+      set men_bye
+      done
+    option r35.s216#26
+      say guybrush r35.s216#26
+      call minutes_deal
+      done
+  end
+end
+
+# 092D: Er nimmt das Protokoll und bekommt zwei Achterstücke dafür.
+sub minutes_deal
+  say men r35.s216#28
+  pickup minutes
+  add money 2
+  if not has money_obj
+    pickup money_obj
+  end
+end
+
+# 11E0: das Menü nach #61
+sub keg_menu
+  say men r35.s216#61
+  choose
+    option r35.s216#62 if not m_keg
+      say guybrush r35.s216#62
+      set m_keg
+      say men r35.s216#67
+      say men r35.s216#68
+      wait 60
+      say men r35.s216#69
+      say men r35.s216#70
+      wait 60
+      say men r35.s216#71
+      done
+    option r35.s216#63 if not m_rats and m_insulted
+      say guybrush r35.s216#63
+      call rat_story
+      done
+    option r35.s216#64 if not m_rats and not m_insulted
+      say guybrush r35.s216#64
+      call rat_question
+      done
+    option r35.s216#65
+      say guybrush r35.s216#65
+      set men_bye
+      done
+    option r35.s216#66
+      say guybrush r35.s216#66
+      set m_circus
+      say men r35.s216#72
+      say men r35.s216#73
+      say men r35.s216#74
+      say men r35.s216#75
+      say men r35.s216#76
+      if not rat_count < 5
+        say men r35.s216#77
+      end
+      wait 120
+      say men r35.s216#78
+      set men_bye
+      done
+  end
+end
+
+# r35.s218: der Kartenverkäufer. Beim ersten Mal fragt er nach Cousin Sven
+# (ein Code); dann bietet er die Karte zum Schatz für 100 Achterstücke an.
+# Die Kaufoption (#33) erscheint erst ab 100 Achterstücken – in diesem Ausschnitt
+# gibt es höchstens zwei, die Option fehlt deshalb.
+object citizen_obj o448.name
+  on look
+    say citizen o448#1
+  end
+  on talk
+    if not met_citizen
+      say citizen r35.s218#13
+      set met_citizen
+      choose
+        option r35.s218#14
+          say guybrush r35.s218#14
+          say citizen r35.s218#21
+          done
+        option r35.s218#15
+          say guybrush r35.s218#15
+          say citizen r35.s218#21
+          done
+        option r35.s218#16
+          say guybrush r35.s218#16
+          say citizen r35.s218#19
+          say citizen r35.s218#21
+          done
+        option r35.s218#17
+          say guybrush r35.s218#17
+          say citizen r35.s218#20
+          set c_business
+          done
+      end
+    else
+      say citizen r35.s218#1
+      if c_offered
+        say citizen r35.s218#3
+        say citizen r35.s218#4
+        set c_price
+      else
+        choose
+          option r35.s218#5
+            say guybrush r35.s218#5
+            say citizen r35.s218#12
+            set c_business
+            done
+          option r35.s218#6
+            say guybrush r35.s218#6
+            say citizen r35.s218#10
+            set c_business
+            done
+          option r35.s218#7
+            say guybrush r35.s218#7
+            say citizen r35.s218#12
+            set c_business
+            done
+          option r35.s218#8
+            say guybrush r35.s218#8
+            say citizen r35.s218#11
+            say citizen r35.s218#37
+            done
+        end
+      end
+    end
+    if c_business
+      clear c_business
+      set c_offered
+      say citizen r35.s218#25
+      wait 120
+      say citizen r35.s218#26
+      wait 120
+      say citizen r35.s218#27
+      wait 60
+      say citizen r35.s218#28
+      say citizen r35.s218#29
+      wait 60
+      say citizen r35.s218#30
+      set c_price
+    end
+    if c_price
+      clear c_price
+      choose
+        option r35.s218#32
+          say guybrush r35.s218#32
+          say citizen r35.s218#35
+          done
+        option r35.s218#34
+          say guybrush r35.s218#34
+          say citizen r35.s218#38
+          done
+      end
+    end
+  end
+end
+
+# --- Karte von Mêlée (Raum 85) ------------------------------------------------
+# Frei begehbar; betreten lassen sich hier nur das Dorf (zum Dock, o872) und
+# der Ausguck (o868). Auf dem Weg hinaus bekommt Guybrush seine eigene Figur
+# zurück (r85.ex).
+object map_village o872.name
+  on walk
+    music stop
+    costume guybrush guybrush
+    room dock at 4 34 face right
+    walk guybrush 136 59
+  end
+end
+
+object map_lookout o868.name
+  on walk
+    music stop
+    costume guybrush guybrush
+    room lookout at 114 74 face left
+    walk guybrush 101 63
+  end
+end
+
+object map_fork o866.name
+  on walk
+    say narrator ui.not_included
+  end
+end
+object map_clearing o867.name
+  on walk
+    say narrator ui.not_included
+  end
+end
+object map_shore o865.name
+  on walk
+    say narrator ui.not_included
+  end
+end
+object map_island o864.name
+  on walk
+    say narrator ui.not_included
+  end
+end
+object map_bridge o869.name
+  on walk
+    say narrator ui.not_included
+  end
+end
+object map_lights o870.name
+  on walk
+    say narrator ui.not_included
+  end
+end
+object map_house o871.name
+  on walk
+    say narrator ui.not_included
+  end
+end
+
+# --- Laden der Voodoo-Lady (Raum 29) ---------------------------------------
+object voodoo_door o381.name
+  on open
+    state voodoo_door 1
+    state shop_door 1
+  end
+  on close
+    state voodoo_door 0
+    state shop_door 0
+  end
+  on walk
+    if voodoo_door open
+      # Raum 35: die Tür fällt nach einer Sekunde hinter ihm zu
+      room street at 106 39 face front
+      wait 60
+      state shop_door 0
+      state voodoo_door 0
+    end
+  end
+end
+
+object chickens o382.name
+  on look
+    say guybrush o382#1
+  end
+  on pickup
+    say guybrush o382#2
+  end
+  on other
+    say guybrush o382#3
+  end
+end
+
+object chickens_hanging o383.name
+  on look
+    say guybrush o383#1
+  end
+  on other
+    say guybrush o383#2
+  end
+end
+
+# o391: Beim Ansehen bekommt das Huhn einen neuen Namen (setObjectName, o391#2);
+# hier sind das zwei Objekte am selben Platz, im Raum wie im Inventar.
+object chicken o391.name
+  on look
+    say guybrush o391#1
+    if has chicken
+      lose chicken
+      pickup rubber_chicken
+    else
+      hide chicken
+      show rubber_chicken
+    end
+  end
+  on pickup
+    pickup chicken
+    set got_chicken
+    say guybrush o391#4
+  end
+end
+
+object rubber_chicken o391#2
+  on look
+    say guybrush o391#1
+  end
+  on pickup
+    pickup rubber_chicken
+    set got_chicken
+    say guybrush o391#4
+  end
+end
+
+object bones o392.name
+  on look
+    say guybrush o392#1
+  end
+  on other
+    say guybrush o392#2
+  end
+end
+
+object chalice o393.name
+  on look
+    say guybrush o393#1
+  end
+  on other
+    say guybrush o393#2
+  end
+end
+
+object trunk o390.name
+  on look
+    say guybrush o390#1
+  end
+  on other
+    say guybrush o390#2
+  end
+end
+
+object couch o389.name
+  on look
+    say guybrush o389#1
+  end
+  on use
+    say guybrush o389#2
+  end
+  on other
+    say guybrush o389#3
+  end
+end
+
+object knickknacks o388.name
+  on look
+    say guybrush o388#1
+    say guybrush o388#2
+  end
+  on other
+    say guybrush o388#4
+  end
+end
+
+object basket o386.name
+  on look
+    say guybrush o386#1
+  end
+  on open
+    say guybrush o386#2
+  end
+  on other
+    say guybrush o386#3
+  end
+end
+
+object cauldron o395.name
+  on other
+    say guybrush o395#1
+  end
+end
+
+object baskets_right o387.name
+  on look
+    say guybrush o387#1
+  end
+  on open
+    say guybrush o387#2
+  end
+  on other
+    say guybrush o387#4
+  end
+end
+
+object statue o384.name
+  on look
+    say guybrush o384#1
+  end
+  on other
+    say guybrush o384#2
+  end
+end
+
+object baskets_left o385.name
+  on look
+    say guybrush o385#1
+  end
+  on open
+    say guybrush o385#2
+  end
+  on other
+    say guybrush o385#4
+  end
+end
+
+object love_beads o394.name
+end
+
+# r29.s210: die Voodoo-Lady. Sie errät seinen Namen, schenkt ihm das Huhn
+# und sieht in die Zukunft; danach verschwindet sie in einem Blitz. Kommt
+# Guybrush wieder, ist niemand da (Var[293] = 1).
+object fortune_teller o396.name
+  on talk
+    if vl_gone
+      choose
+        option r29.s210#48
+          say guybrush r29.s210#48
+          wait 60
+          say guybrush r29.s210#51
+          wait 60
+          done
+        option r29.s210#49
+          say guybrush r29.s210#49
+          wait 60
+          say guybrush r29.s210#51
+          wait 60
+          done
+        option r29.s210#50
+          say guybrush r29.s210#50
+          done
+      end
+    else
+      face guybrush right
+      if not vl_met
+        set vl_met
+        say voodoo r29.s210#1
+      else
+        say voodoo r29.s210#2
+      end
+      clear vl_vision
+      choose
+        option r29.s210#3 if not vl_name
+          say guybrush r29.s210#3
+          set vl_name
+          say voodoo r29.s210#9
+          wait 30
+          say voodoo r29.s210#10
+          choose
+            option r29.s210#11
+              say guybrush r29.s210#11
+              say voodoo r29.s210#13
+              done
+            option r29.s210#12
+              say guybrush r29.s210#12
+              set vl_journey
+              say guybrush r29.s210#14
+              say voodoo r29.s210#15
+              done
+          end
+        option r29.s210#4 if got_chicken and not vl_chicken
+          say guybrush r29.s210#4
+          set vl_chicken
+          say voodoo r29.s210#16
+          wait 30
+          say voodoo r29.s210#17
+          say guybrush r29.s210#18
+          say voodoo r29.s210#19
+        option r29.s210#5 if not vl_palms
+          say guybrush r29.s210#5
+          set vl_palms
+          say voodoo r29.s210#20
+          choose
+            option r29.s210#21
+              say guybrush r29.s210#21
+              set vl_vision
+              done
+            option r29.s210#22
+              say guybrush r29.s210#22
+              set vl_nofuture
+              say voodoo r29.s210#23
+              done
+          end
+          if vl_vision
+            done
+          end
+        option r29.s210#6 if vl_nofuture
+          say guybrush r29.s210#6
+          clear vl_nofuture
+          say voodoo r29.s210#25
+          set vl_vision
+          done
+        option r29.s210#7 if vl_journey
+          say guybrush r29.s210#7
+          clear vl_journey
+          say guybrush r29.s210#26
+          if vl_nofuture
+            say voodoo r29.s210#27
+            say voodoo r29.s210#28
+            choose
+            option r29.s210#21
+              say guybrush r29.s210#21
+              set vl_vision
+              done
+            option r29.s210#22
+              say guybrush r29.s210#22
+              set vl_nofuture
+              say voodoo r29.s210#23
+              done
+          end
+          else
+            set vl_vision
+          end
+          if vl_vision
+            done
+          end
+        option r29.s210#8
+          say guybrush r29.s210#8
+          say voodoo r29.s210#24
+          done
+      end
+      if vl_vision
+        clear vl_nofuture
+        clear vl_journey
+        wait 60
+        say voodoo r29.s210#29
+        flash 60
+        say voodoo r29.s210#30
+        say voodoo r29.s210#31
+        say guybrush r29.s210#32
+        say voodoo r29.s210#33
+        wait 60
+        say guybrush r29.s210#34
+        wait 60
+        say voodoo r29.s210#35
+        say guybrush r29.s210#36
+        wait 30
+        say voodoo r29.s210#37
+        say guybrush r29.s210#38
+        say voodoo r29.s210#39
+        wait 60
+        say voodoo r29.s210#40
+        say voodoo r29.s210#41
+        say voodoo r29.s210#42
+        say guybrush r29.s210#43
+        say voodoo r29.s210#44
+        wait 30
+        say voodoo r29.s210#45
+        flash 90
+        remove voodoo
+        wait 30
+        say guybrush r29.s210#46
+        wait 180
+        set vl_gone
+      end
+    end
+  end
+end
+
+# --- Räume -----------------------------------------------------------------
+# Raum 38 des Originals, 320x144 → 142x64
+room lookout original 38 tone 35 105 contrast 0.8
+  walkboxes original
+
+  # Reihenfolge = Zeichen- und Klickreihenfolge: spätere liegen oben.
+  place stairs original 494
+  place path original 496
+  place old_man original 498 face left
+  # Lagerfeuer = Originalkostüm 48, nur als Bild
+  place decor at 64 43 costume 48 states 0.44 speed 6
+
+  entry
+    put lookout 44 46
+    face lookout right
+    if not heard_lookout_music
+      set heard_lookout_music
+      music lookout_music
+    end
+  end
+end
+
+# Raum 33 des Originals: das Dock, 1008x144 → 448x64
+room dock original 33 tone 35 105 contrast 0.8
+  walkboxes original
+  entry
+    music stop
+  end
+  place cliffside original 435 face left
+  place poster original 438 face front
+  place bar_entrance original 437 door face front
+  place archway original 436 face right
+end
+
+# Raum 28 des Originals: die SCUMM Bar, 640x144 → 284x64. Die Piraten sind
+# Objektbilder (je die erste Animationsphase).
+room scummbar original 28 tone 55 95 contrast 0 overlay 374 375 376 377 335 341 353 350 356 344 359 362 347 365 368 370
+  walkboxes original
+  place fireplace original 329 face right
+  place curtain original 334 face front
+  place bar_door original 322 door face left
+  place kitchen_door original 323 door direct face right
+  place pirate_a original 341 face left
+  place pirate_b original 356 face front
+  place pirate_c original 344 face right
+  place pirate_d original 347 face front
+  place dog original 350 face front
+  place leaders_obj original 332 face right
+  place mug original 373 picture face left
+
+  entry
+    music bar_music
+    # r28.s204: am Tisch bei 440,132, Blick nach vorn
+    put leaders 196 59
+    face leaders front
+    # r28.en/s205: Der Koch ist in der Küche, sein Ablauf beginnt von vorn.
+    remove cook
+    clear cook_out
+    clear cook_called
+    start cook
+  end
+end
+
+# s117: eine Zwischenzeile (#1) auf Schwarz, dann das Geisterschiff im Lavafluss
+# (Raum 70) und LeChucks Kajüte (Raum 72), je 320×144 → 142×64. Beide sind
+# fast nur blau und rot; der Blaukanal zeigt das Schiff als helle Silhouette
+# vor der Lava und die Kajüte mit ihren Kanten.
+room meanwhile blank
+end
+
+room ghostship original 70 tone 20 110 contrast 0.8 channel blue
+  walkboxes original
+end
+
+room ghostcabin original 72 tone 45 170 contrast 0.6 channel blue
+  walkboxes original
+end
+
+# Raum 35 des Originals: die Stadtstraße, 480×144 → 213×64
+room street original 35 tone 80 220 contrast 0.4 channel max
+  walkboxes original
+  place street_archway original 458 face right
+  place high_street original 459 face left
+  place sign original 451 face front
+  place clock original 457 face front
+  place shop_door original 452 door face front
+  place house_door_a original 453 door face front
+  place house_door_b original 454 door face front
+  place house_door_c original 455 door face front
+  place house_door_d original 456 door face front
+  place men_obj original 460
+  place rat_obj original 461
+  place citizen_obj original 448
+  entry
+    # r35.ex: Var[247] zählt das Verlassen, wenn er auf die Uhr gesehen hat
+    if clock_looked
+      clear clock_looked
+      add clock_visits 1
+    end
+    # r35.en/s200: die Piraten links, ihre Ratte (solange sie nicht davongelaufen
+    # ist), rechts der Kartenverkäufer
+    put men 22 55
+    face men front
+    put citizen 144 52
+    face citizen front
+    start braak_watch
+    if rat_count < 5
+      put rat 32 60
+      face rat left
+      start rat_watch
+    end
+  end
+end
+
+# Raum 29 des Originals: der Laden der Voodoo-Lady, 496×144 → 220×64
+room voodoo original 29 tone 15 90 contrast 0.8 channel max
+  walkboxes original
+  place voodoo_door original 381 door face left
+  place chickens original 382 face left
+  place chickens_hanging original 383 face front
+  place chicken original 391 picture face front
+  place rubber_chicken original 391 picture face front
+  place bones original 392 face front
+  place chalice original 393 face front
+  place trunk original 390 face front
+  place couch original 389 face front
+  place knickknacks original 388 face front
+  place basket original 386 face front
+  place cauldron original 395 face front
+  place baskets_right original 387 face front
+  place statue original 384 face front
+  place baskets_left original 385 face front
+  place love_beads original 394 face front
+  place fortune_teller original 396 walkto 133 48 face right
+  entry
+    if not vl_gone
+      put voodoo 160 44
+      face voodoo left
+    end
+  end
+end
+
+# Raum 85 des Originals: die Karte, 320×200 → 205×128; die Kamera scrollt in
+# beide Richtungen, damit Wege und Ziele erkennbar bleiben.
+room map original 85 height 128 tone 25 60 contrast 2.0
+  walkboxes original
+  place map_village original 872
+  place map_lookout original 868
+  place map_fork original 866
+  place map_clearing original 867
+  place map_shore original 865
+  place map_island original 864
+  place map_bridge original 869
+  place map_lights original 870
+  place map_house original 871
+  entry
+    music map_music
+  end
+end
+
+# Raum 41 des Originals: die Küche mit dem Steg, 320x144 → 142x64
+room kitchen original 41 tone 85 165 contrast 0 overlay 898 902
+  walkboxes original
+  place kitchen_exit original 894 door face left
+  place barrel original 380 face left
+  place stew original 901 face front
+  place meat original 331 picture face front
+  place pot original 333 picture face front
+  place fish original 378 picture face front
+end

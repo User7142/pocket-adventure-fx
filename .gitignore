@@ -1,0 +1,19 @@
+# Python
+.venv/
+__pycache__/
+
+# Build
+build/
+dist/
+
+# Lokaler Pfad zur Originalkopie
+config.mk
+
+# Generiert von make data (tools/advc.py, fxdata-build.py)
+PocketAdventureFX/gamedata.h
+PocketAdventureFX/fxdata/game.bin
+PocketAdventureFX/fxdata/fxdata.h
+PocketAdventureFX/fxdata/fxdata.bin
+PocketAdventureFX/fxdata/fxdata-data.bin
+
+.DS_Store

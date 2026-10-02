@@ -1,0 +1,5 @@
+// FX-Datenbeschreibung für fxdata-build.py (tools/vendor). Von Hand gepflegt.
+// Einzige Ressource: der Datenblock aus tools/advc.py. Er muss an Adresse 0
+// liegen, weil advc.py alle Adressen relativ zum Blockanfang vergibt
+// (static_assert in PocketAdventureFX.ino).
+raw_t gameData = "game.bin"
