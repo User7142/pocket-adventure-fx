@@ -1,0 +1,6 @@
+# Shell scripts, Python and make break with Windows line endings (CRLF) in WSL.
+# Keep them LF in every checkout, also with core.autocrlf=true.
+*.sh     text eol=lf
+*.py     text eol=lf
+Makefile text eol=lf
+*.mk     text eol=lf

@@ -27,16 +27,16 @@ ARDUBOY_INDEX=https://raw.githubusercontent.com/MrBlinky/Arduboy-homemade-packag
 
 die() { echo "build.sh: $*" >&2; exit 1; }
 
-[ $# -ge 1 ] || die "Aufruf: ./build.sh <Kopie> [<weitere Kopie> …]  (Verzeichnis mit DISK01.LEC)"
+[ $# -ge 1 ] || die "usage: ./build.sh <copy> [<another copy> …]  (directory with DISK01.LEC)"
 copies=()
 for dir in "$@"; do
-  [ -f "$dir/000.LFL" ] && [ -f "$dir/DISK01.LEC" ] || die "$dir: keine Originalkopie (000.LFL und DISK01.LEC fehlen)"
+  [ -f "$dir/000.LFL" ] && [ -f "$dir/DISK01.LEC" ] || die "$dir: not a copy of the game (000.LFL and DISK01.LEC missing)"
   copies+=("$(cd "$dir" && pwd)")
 done
 
-command -v python3 >/dev/null || die "python3 fehlt"
-python3 -c 'import sys; sys.exit(sys.version_info < (3, 10))' || die "Python 3.10 oder neuer nötig"
-command -v curl >/dev/null || die "curl fehlt"
+command -v python3 >/dev/null || die "python3 not found"
+python3 -c 'import sys; sys.exit(sys.version_info < (3, 10))' || die "Python 3.10 or newer required"
+command -v curl >/dev/null || die "curl not found"
 
 # arduino-cli lokal, mit eigener Konfiguration und eigenem Datenverzeichnis
 ARDUINO_DIR="$PWD/build/arduino"
@@ -48,9 +48,9 @@ if [ ! -x "$CLI" ]; then
     Darwin-x86_64) platform=macOS_64bit ;;
     Linux-x86_64) platform=Linux_64bit ;;
     Linux-aarch64 | Linux-arm64) platform=Linux_ARM64 ;;
-    *) die "kein arduino-cli für $(uname -s)-$(uname -m); bitte selbst installieren und ARDUINO_CLI setzen" ;;
+    *) die "no arduino-cli for $(uname -s)-$(uname -m); install it yourself and set ARDUINO_CLI" ;;
   esac
-  echo "build.sh: lade arduino-cli $ARDUINO_CLI_VERSION ($platform)"
+  echo "build.sh: downloading arduino-cli $ARDUINO_CLI_VERSION ($platform)"
   mkdir -p "$ARDUINO_DIR"
   curl -fsSL "https://downloads.arduino.cc/arduino-cli/arduino-cli_${ARDUINO_CLI_VERSION}_${platform}.tar.gz" \
     | tar -xz -C "$ARDUINO_DIR" arduino-cli
@@ -68,7 +68,7 @@ EOF
 fi
 installed=$("$CLI" --config-file "$CONFIG" core list)
 if ! grep -q '^arduboy-homemade:avr' <<<"$installed" || ! grep -q '^arduino:avr' <<<"$installed"; then
-  echo "build.sh: richte den Arduboy-Kern ein ($ARDUBOY_CORE, $AVR_CORE)"
+  echo "build.sh: installing the Arduboy core ($ARDUBOY_CORE, $AVR_CORE)"
   "$CLI" --config-file "$CONFIG" core update-index >/dev/null
   "$CLI" --config-file "$CONFIG" core install "$AVR_CORE" >/dev/null
   "$CLI" --config-file "$CONFIG" core install "$ARDUBOY_CORE" >/dev/null
@@ -87,4 +87,4 @@ done
 make package ORIGINALS="${originals[*]}" \
   ARDUINO_CLI="build/arduino/arduino-cli --config-file build/arduino/arduino-cli.yaml"
 echo
-echo "Fertig: dist/PocketAdventureFX.arduboy"
+echo "Done: dist/PocketAdventureFX.arduboy"
