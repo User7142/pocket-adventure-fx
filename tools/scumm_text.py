@@ -78,7 +78,7 @@ class Text:
             elif p[0] == INT and numbers and p[1] in numbers:
                 out.append(INT_VAR + chr(SLOT_BASE + numbers[p[1]]))
             else:
-                raise ScummError(f"{self.ident}: Text enthält Steuercode {p[0]} ({self.render()!r})")
+                raise ScummError(f"{self.ident}: text contains control code {p[0]} ({self.render()!r})")
         return "".join(out)
 
     def render(self):
@@ -128,7 +128,7 @@ class Decoder:
             if i == 0xFF:
                 return
             self.var_or_word(i & 0x80)
-        raise ScummError(f"Argumentliste zu lang bei {self.pos:#x}")
+        raise ScummError(f"argument list too long at {self.pos:#x}")
 
     def string(self, kind):
         at = self.pos
@@ -189,7 +189,7 @@ class Decoder:
         op = self.byte()
         spec = OPCODES.get(op)
         if spec is None:
-            raise ScummError(f"unbekannter Opcode {op:#04x} bei {self.pos - 1:#x}")
+            raise ScummError(f"unknown opcode {op:#04x} at {self.pos - 1:#x}")
         if callable(spec):
             spec(self, op)
             return
@@ -265,7 +265,7 @@ class Decoder:
         elif code == 0x24:
             self.a(sub, 0x40, "B"); self.byte()
         elif not 1 <= code <= 0x13:
-            raise ScummError(f"Resource: unbekannter Untercode {code:#x}")
+            raise ScummError(f"Resource: unknown subcode {code:#x}")
 
     def actor_ops(self, op):
         convert = (1, 0, 0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 20)
@@ -287,7 +287,7 @@ class Decoder:
             elif code == 0x0D:
                 self.string("actorName")
             elif code not in (0x08, 0x0A, 0x12, 0x14, 0x15):
-                raise ScummError(f"ActorOps: unbekannter Untercode {sub:#x}")
+                raise ScummError(f"ActorOps: unknown subcode {sub:#x}")
 
     def print_ego(self, op):
         if op != 0xD8:
@@ -310,7 +310,7 @@ class Decoder:
                 self.string(kind)
                 return                                                # text ends the list
             else:
-                raise ScummError(f"print: unbekannter Untercode {sub:#x}")
+                raise ScummError(f"print: unknown subcode {sub:#x}")
 
     def string_ops(self, op=None):
         sub = self.byte()
@@ -325,7 +325,7 @@ class Decoder:
         elif code == 0x04:
             self.var(); self.a(sub, 0x80, "B"); self.a(sub, 0x40, "B")
         else:
-            raise ScummError(f"Stringops: unbekannter Untercode {sub:#x}")
+            raise ScummError(f"Stringops: unknown subcode {sub:#x}")
 
     def cursor(self, op=None):
         sub = self.byte()
@@ -339,7 +339,7 @@ class Decoder:
         elif code == 0x0E:
             self.lst()
         elif not 1 <= code <= 8:
-            raise ScummError(f"Cursor: unbekannter Untercode {sub:#x}")
+            raise ScummError(f"Cursor: unknown subcode {sub:#x}")
 
     def matrix_ops(self, op=None):
         sub = self.byte()
@@ -347,7 +347,7 @@ class Decoder:
         if code in (1, 2, 3):
             self.a(sub, 0x80, "B"); self.a(sub, 0x40, "B")
         elif code != 4:
-            raise ScummError(f"Boxops: unbekannter Untercode {sub:#x}")
+            raise ScummError(f"Boxops: unknown subcode {sub:#x}")
 
     def room_ops(self, op=None):
         sub = self.byte()
@@ -355,7 +355,7 @@ class Decoder:
         if code in (1, 2, 3, 4):
             self.a(sub, 0x80, "W"); self.a(sub, 0x40, "W")
         elif code not in (5, 6):
-            raise ScummError(f"Roomops: unbekannter Untercode {sub:#x}")
+            raise ScummError(f"Roomops: unknown subcode {sub:#x}")
 
     def verb_ops(self, op):
         self.a(op, 0x80, "B")
@@ -375,7 +375,7 @@ class Decoder:
             elif code == 0x16:
                 self.a(sub, 0x80, "W"); self.a(sub, 0x40, "B")
             elif code not in (0x6, 0x7, 0x8, 0x9, 0x11, 0x13):
-                raise ScummError(f"Verbops: unbekannter Untercode {sub:#x}")
+                raise ScummError(f"Verbops: unknown subcode {sub:#x}")
 
     def save_load_vars(self, op=None):
         self.byte()
@@ -405,7 +405,7 @@ class Decoder:
             elif code == 0x6:
                 self.step()                                           # embedded command
             elif not 2 <= code <= 5:
-                raise ScummError(f"Ausdruck: unbekannter Code {i:#x}")
+                raise ScummError(f"expression: unknown code {i:#x}")
 
 
 def _ops(codes, spec):
@@ -506,11 +506,11 @@ def decode_block(block, ident):
     elif tag in ("SC", "EN", "EX"):
         verbs, start = {}, 6
     else:
-        raise ScummError(f"{ident}: kein Skriptblock ({tag!r})")
+        raise ScummError(f"{ident}: no script block ({tag!r})")
     try:
         raw = Decoder(block, start).run()
     except (IndexError, struct.error) as e:
-        raise ScummError(f"{ident}: Bytecode endet mitten im Befehl") from e
+        raise ScummError(f"{ident}: bytecode ends in the middle of a command") from e
     texts = []
     for k, (at, kind, parts) in enumerate(raw, 1):
         t = Text(f"{ident}#{k}", kind, parts, at)
@@ -527,7 +527,7 @@ def _directory(game_dir, tag):
         if t == tag:
             count, = struct.unpack_from("<H", index, s)
             return [struct.unpack_from("<BI", index, s + 2 + i * 5) for i in range(count)]
-    raise ScummError(f"000.LFL ohne Verzeichnis {tag}")
+    raise ScummError(f"000.LFL without directory {tag}")
 
 
 def iter_blocks(game_dir):
@@ -536,7 +536,7 @@ def iter_blocks(game_dir):
     game_dir = Path(game_dir)
     files = sorted(game_dir.glob("DISK*.LEC"), key=lambda p: p.name.upper())
     if not files:
-        raise ScummError(f"keine DISK*.LEC in {game_dir}")
+        raise ScummError(f"no DISK*.LEC in {game_dir}")
     disks = [bytes(b ^ XOR_KEY for b in p.read_bytes()) for p in files]
 
     room_blocks = {}                                                  # room → (data, LF start)
@@ -588,9 +588,9 @@ def read_texts(game_dir):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("game_dir", help="Verzeichnis der Originalkopie (DISK01.LEC …)")
-    ap.add_argument("--filter", help="nur Bezeichner, die so beginnen (z. B. o498, r38.)")
-    ap.add_argument("--grep", help="nur Texte, die diesen regulären Ausdruck enthalten")
+    ap.add_argument("game_dir", help="directory of the copy of the original game (DISK01.LEC …)")
+    ap.add_argument("--filter", help="only identifiers that start like this (e.g. o498, r38.)")
+    ap.add_argument("--grep", help="only texts that contain this regular expression")
     args = ap.parse_args()
     texts = read_texts(args.game_dir)
     for ident, t in texts.items():

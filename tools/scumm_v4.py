@@ -43,7 +43,7 @@ def blocks(data, start, end):
         size, = struct.unpack_from("<I", data, off)
         tag = data[off + 4:off + 6].decode("latin1")
         if size < 6 or off + size > end:
-            raise ScummError(f"kaputter Block {tag!r} bei {off:#x} (Größe {size})")
+            raise ScummError(f"broken block {tag!r} at {off:#x} (size {size})")
         yield tag, off + 6, off + size
         off += size
 
@@ -103,13 +103,13 @@ class Room:
         """Image of a room object (first state) at its size according to OC."""
         obj = next((o for o in self.objects if o.number == number), None)
         if obj is None or number not in self._object_images:
-            raise ScummError(f"Raum {self.number}: kein Bild für Objekt {number}")
+            raise ScummError(f"room {self.number}: no image for object {number}")
         return self._decode(self._object_images[number], obj.width, obj.height)
 
     def image(self):
         """Decodes the background as an RGB image."""
         if len(self._bitmap) < 4 + 4 * (self.width // 8):
-            raise ScummError(f"Raum {self.number} hat kein Hintergrundbild")
+            raise ScummError(f"room {self.number} has no background image")
         return self._decode(self._bitmap, self.width, self.height)
 
 
@@ -118,12 +118,12 @@ def read_rooms(game_dir):
     rooms = {}
     files = sorted(Path(game_dir).glob("DISK*.LEC"), key=lambda p: p.name.upper())
     if not files:
-        raise ScummError(f"keine DISK*.LEC in {game_dir}")
+        raise ScummError(f"no DISK*.LEC in {game_dir}")
     for path in files:
         data = bytes(b ^ XOR_KEY for b in path.read_bytes())
         for tag, s, e in blocks(data, 0, len(data)):
             if tag != "LE":
-                raise ScummError(f"{path.name}: erwarte LE-Block, nicht {tag!r}")
+                raise ScummError(f"{path.name}: expected LE block, not {tag!r}")
             for t, ls, le in blocks(data, s, e):
                 if t != "LF":
                     continue
@@ -159,7 +159,7 @@ def read_boxes(data, bx):
     for i in range(count):
         off = start + 1 + i * 20
         if off + 20 > end:
-            raise ScummError("BX-Block kürzer als angegeben")
+            raise ScummError("BX block shorter than stated")
         v = struct.unpack_from("<8hBBH", data, off)
         corners = [(v[0], v[1]), (v[2], v[3]), (v[4], v[5]), (v[6], v[7])]
         boxes.append(Box(corners, v[9], v[10]))
@@ -225,9 +225,9 @@ def read_costume(game_dir, number):
             count, = struct.unpack_from("<H", index, s)
             costumes = [struct.unpack_from("<BI", index, s + 2 + i * 5) for i in range(count)]
     if costumes is None:
-        raise ScummError("000.LFL ohne Kostümverzeichnis (0C)")
+        raise ScummError("000.LFL without costume directory (0C)")
     if not 0 <= number < len(costumes) or not costumes[number][0]:
-        raise ScummError(f"Kostüm {number} gibt es nicht")
+        raise ScummError(f"costume {number} does not exist")
     room, offset = costumes[number]
     for path in sorted(game_dir.glob("DISK*.LEC"), key=lambda p: p.name.upper()):
         data = bytes(b ^ XOR_KEY for b in path.read_bytes())
@@ -237,9 +237,9 @@ def read_costume(game_dir, number):
                 at = lf + 8 + offset
                 size, = struct.unpack_from("<I", data, at)
                 if data[at + 4:at + 6] != b"CO":
-                    raise ScummError(f"Kostüm {number}: kein CO-Block an {at:#x}")
+                    raise ScummError(f"costume {number}: no CO block at {at:#x}")
                 return Costume(number, data[at:at + size])
-    raise ScummError(f"Kostüm {number}: Raum {room} in keiner Diskdatei")
+    raise ScummError(f"costume {number}: room {room} in no disk file")
 
 
 def _resource_block(game_dir, directory, number, tag):
@@ -253,9 +253,9 @@ def _resource_block(game_dir, directory, number, tag):
             count, = struct.unpack_from("<H", index, s)
             entries = [struct.unpack_from("<BI", index, s + 2 + i * 5) for i in range(count)]
     if entries is None:
-        raise ScummError(f"000.LFL ohne Verzeichnis {directory}")
+        raise ScummError(f"000.LFL without directory {directory}")
     if not 0 <= number < len(entries) or not entries[number][0]:
-        raise ScummError(f"{tag} {number} gibt es nicht")
+        raise ScummError(f"{tag} {number} does not exist")
     room, offset = entries[number]
     for path in sorted(game_dir.glob("DISK*.LEC"), key=lambda p: p.name.upper()):
         data = bytes(b ^ XOR_KEY for b in path.read_bytes())
@@ -265,9 +265,9 @@ def _resource_block(game_dir, directory, number, tag):
                 at = lf + 8 + offset
                 size, = struct.unpack_from("<I", data, at)
                 if data[at + 4:at + 6].decode("latin1") != tag:
-                    raise ScummError(f"{tag} {number}: kein {tag}-Block an {at:#x}")
+                    raise ScummError(f"{tag} {number}: no {tag} block at {at:#x}")
                 return data[at:at + size]
-    raise ScummError(f"{tag} {number}: Raum {room} in keiner Diskdatei")
+    raise ScummError(f"{tag} {number}: room {room} in no disk file")
 
 
 def read_sound(game_dir, number):
@@ -308,7 +308,7 @@ def adlib_melody(ad, channel=None):
     channel explicitly if the automatic choice is off.
     """
     if len(ad) < 0x13 + 128 or ad[2] != 0x80:
-        raise ScummError("AD-Ressource ist keine Musik")
+        raise ScummError("AD resource is not music")
     ticks, play_once = ad[3], ad[4]
     track = ad[2 + 0x11 + 128:]
     us_per_tick = 500000 * 256 / ticks / 480
@@ -365,7 +365,7 @@ def adlib_melody(ad, channel=None):
                 pitches.setdefault(ch, []).append(note)
         melodic = {ch: sum(p) / len(p) for ch, p in pitches.items() if len(set(p)) > 1}
         if not melodic:
-            raise ScummError("keine Melodiestimme gefunden")
+            raise ScummError("no melody voice found")
         channel = max(melodic, key=melodic.get)
 
     active = {}
@@ -406,7 +406,7 @@ class Costume:
         self.num_anims = data[6]
         fmt = data[7] & 0x7F
         if fmt not in (0x58, 0x59):
-            raise ScummError(f"Kostüm {number}: Format {fmt:#x} nicht unterstützt")
+            raise ScummError(f"costume {number}: format {fmt:#x} not supported")
         self.colors = 16 if fmt == 0x58 else 32
         self.palette = data[8:8 + self.colors]  # indices into the room palette
         p = 8 + self.colors
@@ -561,7 +561,7 @@ def decode_strip(bm, offset, pixels, x0, pitch, height):
     elif 64 <= code <= 68 or 84 <= code <= 88 or 104 <= code <= 108 or 124 <= code <= 128:
         _majmin(bm, src, shift, height, put)
     else:
-        raise ScummError(f"unbekannter Streifen-Codec {code}")
+        raise ScummError(f"unknown strip codec {code}")
 
 
 def _basic(bm, src, shift, height, pos, put):
@@ -609,32 +609,32 @@ def _majmin(bm, src, shift, height, put):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("game_dir", type=Path, help="Verzeichnis mit DISK01.LEC …")
-    ap.add_argument("--out", type=Path, help="Räume als room_NNN.png hierhin schreiben")
-    ap.add_argument("--room", type=int, action="append", help="nur diese Raumnummer(n)")
+    ap.add_argument("game_dir", type=Path, help="directory with DISK01.LEC …")
+    ap.add_argument("--out", type=Path, help="write rooms here as room_NNN.png")
+    ap.add_argument("--room", type=int, action="append", help="only these room number(s)")
     args = ap.parse_args()
     try:
         rooms = read_rooms(args.game_dir)
     except ScummError as e:
-        print(f"Fehler: {e}", file=sys.stderr)
+        print(f"error: {e}", file=sys.stderr)
         return 1
     for n in sorted(rooms):
         if args.room and n not in args.room:
             continue
         r = rooms[n]
-        line = f"Raum {n:3d}: {r.width}x{r.height}, {len(r.boxes)} Boxen, {len(r.objects)} Objekte"
+        line = f"room {n:3d}: {r.width}x{r.height}, {len(r.boxes)} boxes, {len(r.objects)} objects"
         if args.room:
             for i, box in enumerate(r.boxes):
                 line += f"\n    Box {i}: {box.corners} flags={box.flags:#x}"
             for o in r.objects:
-                line += (f"\n    Objekt {o.number:4d} {o.name!r:24} bei {o.x},{o.y} "
-                         f"{o.width}x{o.height} Laufziel {o.walk_x},{o.walk_y} Richtung {o.direction}")
+                line += (f"\n    object {o.number:4d} {o.name!r:24} at {o.x},{o.y} "
+                         f"{o.width}x{o.height} walk target {o.walk_x},{o.walk_y} direction {o.direction}")
         if args.out:
             args.out.mkdir(parents=True, exist_ok=True)
             try:
                 r.image().save(args.out / f"room_{n:03d}.png")
             except ScummError as e:
-                line += f"  FEHLER: {e}"
+                line += f"  ERROR: {e}"
         print(line)
     return 0
 

@@ -238,7 +238,7 @@ class Blob:
 
     def mark(self, label):
         if label in self.labels:
-            raise CompileError(f"interner Fehler: Label doppelt: {label}")
+            raise CompileError(f"internal error: duplicate label: {label}")
         self.labels[label] = self.here()
 
     def put(self, typ, value):
@@ -247,13 +247,13 @@ class Blob:
             self.fixups.append((self.here(), value))
             value = 0
         if not 0 <= value < (1 << (8 * n)):
-            raise CompileError(f"Wert {value} passt nicht in {typ}")
+            raise CompileError(f"value {value} does not fit into {typ}")
         self.data += value.to_bytes(n, "little")
 
     def record(self, record_name, /, **fields):
         spec = RECORDS[record_name]
         if set(fields) != {f for f, _ in spec}:
-            raise CompileError(f"interner Fehler: Felder für {record_name}: {sorted(fields)}")
+            raise CompileError(f"internal error: fields for {record_name}: {sorted(fields)}")
         for f, t in spec:
             self.put(t, fields[f])
 
@@ -263,7 +263,7 @@ class Blob:
     def resolve(self):
         for off, label in self.fixups:
             if label not in self.labels:
-                raise CompileError(f"interner Fehler: Label fehlt: {label}")
+                raise CompileError(f"internal error: missing label: {label}")
             self.data[off:off + 3] = self.labels[label].to_bytes(3, "little")
 
 
@@ -287,7 +287,7 @@ def encode_pil(img, name, frame=None, mask=False):
     img = img.convert("RGBA")
     fw, fh = frame or img.size
     if img.width % fw or img.height % fh:
-        raise CompileError(f"{name}: Bildgröße ist kein Vielfaches von {fw}x{fh}")
+        raise CompileError(f"{name}: image size is not a multiple of {fw}x{fh}")
     px = img.load()
     masked = mask or img.getchannel("A").getextrema()[0] < 255
     out = bytearray([fw >> 8, fw & 0xFF, fh >> 8, fh & 0xFF])
@@ -322,7 +322,7 @@ def parse_inline_notes(spec):
             hz, ms = tok.split(":")
             notes.append((int(hz), int(ms)))
         except ValueError:
-            raise CompileError(f"Note '{tok}' nicht im Format Hz:ms")
+            raise CompileError(f"note '{tok}' not in the format Hz:ms")
     return notes
 
 
@@ -333,10 +333,10 @@ def encode_track(notes):
     out = []
     for hz, ms in notes:
         if hz < 0 or ms <= 0:
-            raise CompileError(f"ungültige Note {hz}:{ms}")
+            raise CompileError(f"invalid note {hz}:{ms}")
         ocr = 0 if hz == 0 else round(TIMER3_HALF_CLOCK / hz) - 1
         if not 0 <= ocr <= 0xFFFF:
-            raise CompileError(f"Frequenz {hz} Hz außerhalb des Timer-Bereichs")
+            raise CompileError(f"frequency {hz} Hz outside the timer range")
         while ms > 0:
             chunk = min(ms, 255)
             out.append((ocr, chunk))
@@ -425,7 +425,7 @@ class Line:
         self.tokens = tokens
 
     def err(self, msg):
-        return CompileError(f"Zeile {self.no}: {msg}")
+        return CompileError(f"line {self.no}: {msg}")
 
 
 def strip_comment(raw):
@@ -452,7 +452,7 @@ def tokenize(text):
         try:
             toks = shlex.split(strip_comment(raw))
         except ValueError as e:
-            raise CompileError(f"Zeile {no}: {e}")
+            raise CompileError(f"line {no}: {e}")
         if toks:
             lines.append(Line(no, toks))
     return lines
@@ -487,7 +487,7 @@ def box_scale(box, slots):
         return v, v
     s1, y1, s2, y2 = slots[box.scale & 0x7FFF]
     if y1 == y2:
-        raise CompileError(f"Skalierungsstufe {box.scale & 0x7FFF} ungültig")
+        raise CompileError(f"invalid scale level {box.scale & 0x7FFF}")
 
     def at(y):
         return max(1, min(255, round(s1 + (s2 - s1) * (y - y1) / (y2 - y1))))
@@ -528,16 +528,16 @@ class Game:
     def original_room(self, number, ln):
         """Room from the original data (loaded once, then cached)."""
         if self.original_dir is None:
-            raise ln.err("braucht die Originaldaten: advc.py --original <Verzeichnis> "
-                         "(im Makefile: make ORIGINAL=<Verzeichnis>)")
+            raise ln.err("needs the original data: advc.py --original <directory> "
+                         "(in the Makefile: make ORIGINAL=<directory>)")
         if self._original_rooms is None:
             import scumm_v4
             try:
                 self._original_rooms = scumm_v4.read_rooms(self.original_dir)
             except scumm_v4.ScummError as e:
-                raise ln.err(f"Originaldaten: {e}")
+                raise ln.err(f"original data: {e}")
         if number not in self._original_rooms:
-            raise ln.err(f"Raum {number} gibt es in den Originaldaten nicht")
+            raise ln.err(f"room {number} does not exist in the original data")
         return self._original_rooms[number]
 
     def original_room_of(self, game_dir, number, ln):
@@ -549,9 +549,9 @@ class Game:
             try:
                 cache[game_dir] = scumm_v4.read_rooms(game_dir)
             except scumm_v4.ScummError as e:
-                raise ln.err(f"Originaldaten: {e}")
+                raise ln.err(f"original data: {e}")
         if number not in cache[game_dir]:
-            raise ln.err(f"Raum {number} gibt es in {game_dir} nicht")
+            raise ln.err(f"room {number} does not exist in {game_dir}")
         return cache[game_dir][number]
 
     def original_costume(self, number, ln):
@@ -560,7 +560,7 @@ class Game:
         try:
             return scumm_v4.read_costume(self.original_dir, number)
         except scumm_v4.ScummError as e:
-            raise ln.err(f"Originaldaten: {e}")
+            raise ln.err(f"original data: {e}")
 
 
 class Parser:
@@ -583,22 +583,22 @@ class Parser:
             kw, *args = ln.tokens
             handler = getattr(self, f"top_{kw}", None)
             if handler is None:
-                raise ln.err(f"unbekannte Anweisung '{kw}'")
+                raise ln.err(f"unknown statement '{kw}'")
             handler(ln, args)
 
     def new_id(self, table, ln, ident, what):
         if not re.fullmatch(r"[a-z_][a-z0-9_]*", ident):
-            raise ln.err(f"ungültiger Bezeichner '{ident}'")
+            raise ln.err(f"invalid identifier '{ident}'")
         if ident in table:
-            raise ln.err(f"{what} '{ident}' doppelt definiert")
+            raise ln.err(f"{what} '{ident}' defined twice")
         return ident
 
     def top_verb(self, ln, args):
         if len(args) not in (2, 4) or (len(args) == 4 and args[2] != "prep"):
-            raise ln.err("Syntax: verb <id> <text> [prep <text>]  (Texte als Verweis, z. B. s22#10)")
+            raise ln.err("Syntax: verb <id> <text> [prep <text>]  (texts as references, e.g. s22#10)")
         if args[0] == "other":
-            raise ln.err("'other' ist reserviert (on other = alle übrigen Verben)")
-        vid = self.new_id(self.g.verbs, ln, args[0], "Verb")
+            raise ln.err("'other' is reserved (on other = all remaining verbs)")
+        vid = self.new_id(self.g.verbs, ln, args[0], "verb")
         self.g.verbs[vid] = {"name": self.text_ref(ln, args[1]),
                              "prep": self.text_ref(ln, args[3]) if len(args) == 4 else None,
                              "index": len(self.g.verbs)}
@@ -606,9 +606,9 @@ class Parser:
     def top_default(self, ln, args):
         if len(args) != 1:
             raise ln.err("Syntax: default <verb>")
-        verb = self.ref(self.g.verbs, ln, args[0], "Verb")
+        verb = self.ref(self.g.verbs, ln, args[0], "verb")
         if verb in self.g.defaults:
-            raise ln.err(f"default {verb} doppelt")
+            raise ln.err(f"default {verb} given twice")
         self.g.defaults[verb] = self.block(("end",))[0]
 
     def top_music(self, ln, args):
@@ -618,10 +618,10 @@ class Parser:
         if len(args) < 3 or args[1] != "notes":
             raise ln.err('Syntax: music <id> notes "<Hz:ms …>" [loop] '
                          '| music <id> original <sound> [channel N] [start MS]')
-        mid = self.new_id(self.g.music, ln, args[0], "Musik")
+        mid = self.new_id(self.g.music, ln, args[0], "music")
         loop = args[3:] == ["loop"]
         if args[3:] not in ([], ["loop"]):
-            raise ln.err(f"unerwartet: {args[3:]}")
+            raise ln.err(f"unexpected: {args[3:]}")
         notes = parse_inline_notes(args[2])
         self.g.music[mid] = {"notes": encode_track(notes), "loop": loop, "index": len(self.g.music)}
 
@@ -630,20 +630,20 @@ class Parser:
         AdLib version (the PC speaker version is only a placeholder for the
         room music). Loops as in the original."""
         import scumm_v4
-        mid = self.new_id(self.g.music, ln, args[0], "Musik")
+        mid = self.new_id(self.g.music, ln, args[0], "music")
         number = self.num(ln, args[2])
         opts = self.keyvals(ln, args[3:], {"channel": 1, "start": 1, "lead": 1})
         self.g.original_room(1, ln)  # checks the original directory
         try:
             sound = scumm_v4.read_sound(self.g.original_dir, number)
             if "AD" not in sound:
-                raise scumm_v4.ScummError(f"Sound {number} hat keine AdLib-Fassung")
+                raise scumm_v4.ScummError(f"sound {number} has no AdLib version")
             notes, loop, _ = scumm_v4.adlib_melody(sound["AD"], opts.get("channel", [None])[0])
             if "lead" in opts:
                 lead, _, _ = scumm_v4.adlib_melody(sound["AD"], opts["lead"][0])
                 notes = with_lead_in(notes, lead)
         except scumm_v4.ScummError as e:
-            raise ln.err(f"Originaldaten: {e}")
+            raise ln.err(f"original data: {e}")
         # start <ms>: skip the intro (e.g. the long sound carpet before
         # the title theme, which a monophonic speaker can't reproduce).
         skip = opts.get("start", [0])[0]
@@ -656,7 +656,7 @@ class Parser:
                 notes[0] = (hz, ms - skip)
                 skip = 0
         if not notes:
-            raise ln.err(f"start {opts['start'][0]}: danach bleibt keine Note")
+            raise ln.err(f"start {opts['start'][0]}: no note left after it")
         self.g.music[mid] = {"notes": encode_track(notes), "loop": loop, "index": len(self.g.music)}
 
     def top_actor(self, ln, args):
@@ -669,7 +669,7 @@ class Parser:
             return
         if len(args) == 3 and args[2] == "invisible":
             # speaker without a character of their own, e.g. people who are part of the background
-            aid = self.new_id(self.g.actors, ln, args[0], "Actor")
+            aid = self.new_id(self.g.actors, ln, args[0], "actor")
             self.g.actors[aid] = {
                 "sprite": ("pil", "invisible", Image.new("RGBA", (1, 1), (0, 0, 0, 0))),
                 "stand": 0, "walk": [0, 1], "talk": 0, "front": 0, "fronttalk": 0,
@@ -677,9 +677,9 @@ class Parser:
             }
             return
         if len(args) < 4 or args[2] != "sprite":
-            raise ln.err('Syntax: actor <id> sprite "<png>" stand N walk ERST ANZAHL talk N front N fronttalk N '
-                         '| actor <id> costume <nr> [scale S] [palette RAUM] [dark D] [outline O] | actor <id> invisible')
-        aid = self.new_id(self.g.actors, ln, args[0], "Actor")
+            raise ln.err('Syntax: actor <id> sprite "<png>" stand N walk FIRST COUNT talk N front N fronttalk N '
+                         '| actor <id> costume <nr> [scale S] [palette ROOM] [dark D] [outline O] | actor <id> invisible')
+        aid = self.new_id(self.g.actors, ln, args[0], "actor")
         opts = self.keyvals(ln, args[4:], {"stand": 1, "walk": 2, "talk": 1, "front": 1, "fronttalk": 1})
         stand = opts.get("stand", [0])[0]
         talk = opts.get("talk", [stand])[0]
@@ -703,7 +703,7 @@ class Parser:
         """Actor from an original costume: standing, walk cycle, talking, front,
         front talking – all facing right; the engine mirrors for left."""
         import scumm_v4 as sv
-        aid = self.new_id(self.g.actors, ln, args[0], "Actor")
+        aid = self.new_id(self.g.actors, ln, args[0], "actor")
         number = self.num(ln, args[3])
         scale, palette_room, dark, outline, obj, depth = self.costume_options(ln, args[4:])
         costume = self.g.original_costume(number, ln)
@@ -763,8 +763,8 @@ class Parser:
 
     def top_object(self, ln, args):
         if len(args) != 2:
-            raise ln.err("Syntax: object <id> <name>  (Name als Verweis, z. B. o498.name)")
-        oid = self.new_id(self.g.objects, ln, args[0], "Objekt")
+            raise ln.err("Syntax: object <id> <name>  (name as reference, e.g. o498.name)")
+        oid = self.new_id(self.g.objects, ln, args[0], "object")
         obj = {"name": self.text_ref(ln, args[1]), "verbs": [], "index": len(self.g.objects), "line": ln}
         self.g.objects[oid] = obj
         # Verb handlers are only resolved after all objects have been read,
@@ -772,12 +772,12 @@ class Parser:
         while True:
             sub = self.next()
             if sub is None:
-                raise ln.err(f"object {oid}: 'end' fehlt")
+                raise ln.err(f"object {oid}: 'end' missing")
             kw, *a = sub.tokens
             if kw == "end" and not a:
                 break
             if kw != "on" or len(a) not in (1, 2):
-                raise sub.err("in object erwartet: on <verb> [<objekt>] … end")
+                raise sub.err("expected in object: on <verb> [<object>] … end")
             body = self.block(("end",))[0]
             obj["verbs"].append({"verb": a[0], "other": a[1] if len(a) == 2 else None,
                                  "body": body, "line": sub})
@@ -787,7 +787,7 @@ class Parser:
                   '| room <id> blank')
         if len(args) < 2 or args[1] not in ("bg", "original", "blank") or (args[1] != "blank" and len(args) < 3):
             raise ln.err(syntax)
-        rid = self.new_id(self.g.rooms, ln, args[0], "Raum")
+        rid = self.new_id(self.g.rooms, ln, args[0], "room")
         room = {"boxes": [], "places": [], "entry": [], "index": len(self.g.rooms), "line": ln,
                 "original": None, "scale": 1.0, "dx": 0}
         if args[1] == "blank":
@@ -837,7 +837,7 @@ class Parser:
         while True:
             sub = self.next()
             if sub is None:
-                raise ln.err(f"room {rid}: 'end' fehlt")
+                raise ln.err(f"room {rid}: 'end' missing")
             kw, *a = sub.tokens
             if kw == "end" and not a:
                 break
@@ -848,7 +848,7 @@ class Parser:
                 room["boxes"].append(([(x0, y0), (x1, y0), (x1, y1), (x0, y1)], sub, (255, 255)))
             elif kw == "walkboxes" and a == ["original"]:
                 if not room["original"]:
-                    raise sub.err("walkboxes original nur in einem Raum aus den Originaldaten")
+                    raise sub.err("walkboxes original only in a room from the original data")
                 s = room["scale"]
                 for box in room["original"].boxes:
                     room["boxes"].append(([(x * s + room["dx"], y * s) for x, y in box.corners], sub,
@@ -858,7 +858,7 @@ class Parser:
             elif kw == "entry" and not a:
                 room["entry"] = self.block(("end",))[0]
             else:
-                raise sub.err(f"in room unbekannt: '{kw}'")
+                raise sub.err(f"unknown in room: '{kw}'")
 
     def top_start(self, ln, args):
         """start <room> or a start … end block (start script that begins
@@ -868,7 +868,7 @@ class Parser:
         elif not args:
             self.g.start_room = self.block(("end",))[0]
         else:
-            raise ln.err("Syntax: start <raum> | start … end")
+            raise ln.err("Syntax: start <room> | start … end")
 
     def top_inventoryverb(self, ln, args):
         if len(args) != 1:
@@ -886,7 +886,7 @@ class Parser:
         pauses while a script is running (cutscene, dialogue)."""
         if len(args) != 1:
             raise ln.err("Syntax: routine <id>")
-        rid = self.new_id(self.g.routines, ln, args[0], "Ablauf")
+        rid = self.new_id(self.g.routines, ln, args[0], "routine")
         body, _ = self.block(("end",))
         self.g.routines[rid] = (ln, body)
 
@@ -895,7 +895,7 @@ class Parser:
         parts of conversations that the original jumps to from several places."""
         if len(args) != 1:
             raise ln.err("Syntax: sub <id>")
-        sid = self.new_id(self.g.subs, ln, args[0], "Unterprogramm")
+        sid = self.new_id(self.g.subs, ln, args[0], "subroutine")
         body, _ = self.block(("end",))
         self.g.subs[sid] = (ln, body)
 
@@ -905,7 +905,7 @@ class Parser:
         rat). It runs in the foreground like a verb script."""
         if len(args) != 1:
             raise ln.err("Syntax: cutscene <id>")
-        cid = self.new_id(self.g.cutscenes, ln, args[0], "Szene")
+        cid = self.new_id(self.g.cutscenes, ln, args[0], "cutscene")
         body, _ = self.block(("end",))
         self.g.cutscenes[cid] = (ln, body)
 
@@ -915,7 +915,7 @@ class Parser:
         if len(args) != 3 or args[1] != "original":
             raise ln.err("Syntax: number <variable> original <nr>")
         if args[0] in self.g.numbers:
-            raise ln.err(f"number {args[0]} doppelt")
+            raise ln.err(f"number {args[0]} given twice")
         self.g.numbers[args[0]] = self.num(ln, args[2])
 
     def top_string(self, ln, args):
@@ -924,7 +924,7 @@ class Parser:
         remembers. Content via setstring/setchar."""
         if len(args) != 3 or args[1] != "original":
             raise ln.err("Syntax: string <id> original <nr>")
-        sid = self.new_id(self.g.strings, ln, args[0], "String")
+        sid = self.new_id(self.g.strings, ln, args[0], "string")
         self.g.strings[sid] = {"original": self.num(ln, args[2]), "slot": len(self.g.strings), "line": ln}
 
     def top_card(self, ln, args):
@@ -934,18 +934,18 @@ class Parser:
         colour component (lettering in blue or similar stays legible). The image comes from
         each language version separately – the text is drawn in."""
         if len(args) < 3 or args[1] != "original":
-            raise ln.err("Syntax: card <id> original <raum> [threshold N] [music <id>]")
-        cid = self.new_id(self.g.cards, ln, args[0], "Karte")
+            raise ln.err("Syntax: card <id> original <room> [threshold N] [music <id>]")
+        cid = self.new_id(self.g.cards, ln, args[0], "card")
         opts = self.keyvals(ln, args[3:], {"threshold": 1, "music": 1})
         self.g.cards[cid] = {"room": self.num(ln, args[2]), "threshold": opts.get("threshold", [50])[0],
                              "music": opts.get("music", [None])[0], "line": ln}
 
     # ---- Greyscale -------------------------------------------------------
 
-    GREY_SYNTAX = ("Syntax: greyscale title | card <id> | room <id>, darin Zeilen\n"
-                   "  layer [from X] [Tonoptionen]\n"
-                   "  subject hue <name> | polygon X Y X Y … [Tonoptionen] [min N] [outline]\n"
-                   "Tonoptionen: channel C | weights R G B, tone S W | tone auto, contrast K, "
+    GREY_SYNTAX = ("Syntax: greyscale title | card <id> | room <id>, containing the lines\n"
+                   "  layer [from X] [tone options]\n"
+                   "  subject hue <name> | polygon X Y X Y … [tone options] [min N] [outline]\n"
+                   "tone options: channel C | weights R G B, tone S W | tone auto, contrast K, "
                    "gamma G, max N, dither")
 
     def top_greyscale(self, ln, args):
@@ -958,12 +958,12 @@ class Parser:
         else:
             raise ln.err(self.GREY_SYNTAX)
         if key in self.g.greyscale:
-            raise ln.err(f"greyscale {' '.join(args)} doppelt")
+            raise ln.err(f"greyscale {' '.join(args)} given twice")
         spec = {"layers": [], "subjects": [], "line": ln}
         while True:
             sub = self.next()
             if sub is None:
-                raise ln.err("greyscale: 'end' fehlt")
+                raise ln.err("greyscale: 'end' missing")
             kw, *a = sub.tokens
             if kw == "end" and not a:
                 break
@@ -974,12 +974,12 @@ class Parser:
             else:
                 raise sub.err(self.GREY_SYNTAX)
         if not spec["layers"]:
-            raise ln.err("greyscale braucht mindestens eine layer-Zeile")
+            raise ln.err("greyscale needs at least one layer line")
         edges = [layer.get("from", 0) for layer in spec["layers"]]
         if len(set(edges)) != len(edges):
-            raise ln.err("zwei Schichten mit derselben Kante (from)")
+            raise ln.err("two layers with the same edge (from)")
         if 0 not in edges:
-            raise ln.err("eine Schicht muss ab dem linken Rand gelten (ohne from)")
+            raise ln.err("one layer must start at the left edge (without from)")
         self.g.greyscale[key] = spec
 
     def grey_options(self, ln, toks, layer):
@@ -997,20 +997,20 @@ class Parser:
                     j += 1
                 nums = [self.real(ln, v) for v in toks[1:j]]
                 if len(nums) < 6 or len(nums) % 2:
-                    raise ln.err("polygon braucht mindestens drei Punkte (X Y …)")
+                    raise ln.err("polygon needs at least three points (X Y …)")
                 out["mask"] = ("polygon", list(zip(nums[::2], nums[1::2])))
                 i = j
             else:
-                raise ln.err("subject braucht hue <name> oder polygon X Y …")
+                raise ln.err("subject needs hue <name> or polygon X Y …")
         while i < len(toks):
             k = toks[i]
             def take(n):
                 vals = toks[i + 1:i + 1 + n]
                 if len(vals) != n:
-                    raise ln.err(f"'{k}' braucht {n} Wert(e)")
+                    raise ln.err(f"'{k}' needs {n} value(s)")
                 return vals
             if k in out:
-                raise ln.err(f"'{k}' doppelt")
+                raise ln.err(f"'{k}' given twice")
             if k == "from" and layer:
                 out[k] = self.real(ln, take(1)[0])
             elif k == "channel":
@@ -1026,15 +1026,15 @@ class Parser:
                     continue
                 black, white = (self.real(ln, v) for v in take(2))
                 if not 0 <= black < white:
-                    raise ln.err("tone: 0 ≤ schwarz < weiß")
+                    raise ln.err("tone: 0 ≤ black < white")
                 out[k] = (black, white)
             elif k in ("contrast", "gamma"):
                 out[k] = self.real(ln, take(1)[0])
                 if out[k] < 0 or (k == "gamma" and out[k] == 0):
-                    raise ln.err(f"{k} muss positiv sein")
+                    raise ln.err(f"{k} must be positive")
             elif k in ("max", "min"):
                 if k == "min" and layer:
-                    raise ln.err("min nur bei subject")
+                    raise ln.err("min only with subject")
                 out[k] = self.num(ln, take(1)[0])
                 if not 0 <= out[k] <= orig.GREY_PLANES:
                     raise ln.err(f"{k}: 0…{orig.GREY_PLANES}")
@@ -1047,16 +1047,16 @@ class Parser:
                 i += 1
                 continue
             else:
-                raise ln.err(f"unbekannte Option '{k}'\n{self.GREY_SYNTAX}")
+                raise ln.err(f"unknown option '{k}'\n{self.GREY_SYNTAX}")
             i += 1 + {"weights": 3, "tone": 2}.get(k, 1)
         if "channel" in out and "weights" in out:
-            raise ln.err("channel und weights schließen sich aus")
+            raise ln.err("channel and weights are mutually exclusive")
         if out.get("min", 0) > out.get("max", orig.GREY_PLANES):
-            raise ln.err("min größer als max")
+            raise ln.err("min greater than max")
         return out
 
     def top_title(self, ln, args):
-        syntax = ('Syntax: title "<png>" [music <id>] | title original <raum> [overlay <objekt> X Y] '
+        syntax = ('Syntax: title "<png>" [music <id>] | title original <room> [overlay <object> X Y] '
                   'crop X0 Y0 X1 Y1 [tone S W] [contrast K] [music <id>]')
         if not args:
             raise ln.err(syntax)
@@ -1070,7 +1070,7 @@ class Parser:
             raise ln.err(syntax)
         opts = self.keyvals(ln, args[2:], {"overlay": 3, "crop": 4, "tone": 2, "contrast": 1, "music": 1})
         if "crop" not in opts:
-            raise ln.err("title original braucht crop X0 Y0 X1 Y1")
+            raise ln.err("title original needs crop X0 Y0 X1 Y1")
         source = self.g.original_room(self.num(ln, args[1]), ln)
         img = source.image()
         if "overlay" in opts:
@@ -1081,10 +1081,10 @@ class Parser:
                 raise ln.err(f"overlay: {e}")
         x0, y0, x1, y1 = opts["crop"]
         if not (0 <= x0 < x1 <= img.width and 0 <= y0 < y1 <= img.height):
-            raise ln.err("crop liegt außerhalb des Bildes")
+            raise ln.err("crop lies outside the image")
         width = orig.scaled(x1 - x0, 64 / (y1 - y0))
         if width > 128:
-            raise ln.err(f"crop ist zu breit: wird {width} px statt höchstens 128")
+            raise ln.err(f"crop is too wide: becomes {width} px instead of at most 128")
         black, white = opts.get("tone", [30, 95])
         mono = orig.to_mono(img.crop((x0, y0, x1, y1)), (width, 64), black, white,
                             opts.get("contrast", [1.0])[0])
@@ -1100,13 +1100,13 @@ class Parser:
         try:
             return int(v, 0)
         except ValueError:
-            raise ln.err(f"Zahl erwartet, nicht '{v}'")
+            raise ln.err(f"number expected, not '{v}'")
 
     def real(self, ln, v):
         try:
             return float(v)
         except ValueError:
-            raise ln.err(f"Zahl erwartet, nicht '{v}'")
+            raise ln.err(f"number expected, not '{v}'")
 
     def keyvals(self, ln, toks, arity, words=()):
         out = {}
@@ -1114,17 +1114,17 @@ class Parser:
         while i < len(toks):
             k = toks[i]
             if k not in arity:
-                raise ln.err(f"unbekannte Option '{k}'")
+                raise ln.err(f"unknown option '{k}'")
             n = arity[k]
             if n is None:  # any number of numbers up to the next option
                 n = 0
                 while i + 1 + n < len(toks) and toks[i + 1 + n] not in arity:
                     n += 1
                 if not n:
-                    raise ln.err(f"'{k}' braucht mindestens einen Wert")
+                    raise ln.err(f"'{k}' needs at least one value")
             vals = toks[i + 1:i + 1 + n]
             if len(vals) != n:
-                raise ln.err(f"'{k}' braucht {n} Wert(e)")
+                raise ln.err(f"'{k}' needs {n} value(s)")
             out[k] = [v if k in ("image", "face", "music", "object") or k in words else
                       self.real(ln, v) if k in ("contrast", "scale", "states") else self.num(ln, v) for v in vals]
             i += 1 + n
@@ -1134,8 +1134,8 @@ class Parser:
         # place <obj> at x y [w h] [image …] walkto x y face dir
         # place <obj> original <nr> [image …] [walkto x y] [face dir]
         # place decor at x y costume|image … – image only, no hotspot
-        syntax = ('Syntax: place <objekt> at x y [w h] [image "<png>" frames N speed N] walkto x y face <dir> '
-                  '| place <objekt> original <nr> [walkto x y] [face <dir>]')
+        syntax = ('Syntax: place <object> at x y [w h] [image "<png>" frames N speed N] walkto x y face <dir> '
+                  '| place <object> original <nr> [walkto x y] [face <dir>]')
         if len(a) < 3 or a[1] not in ("at", "original"):
             raise ln.err(syntax)
         obj = a[0]
@@ -1145,11 +1145,11 @@ class Parser:
         if a[1] == "original":
             dx = room["dx"]
             if not room["original"]:
-                raise ln.err("place … original nur in einem Raum aus den Originaldaten")
+                raise ln.err("place … original only in a room from the original data")
             number = self.num(ln, a[2])
             source = next((o for o in room["original"].objects if o.number == number), None)
             if source is None:
-                raise ln.err(f"Objekt {number} gibt es im Originalraum {room['original'].number} nicht")
+                raise ln.err(f"object {number} does not exist in original room {room['original'].number}")
             s = room["scale"]
             x, y = orig.scaled(source.x, s), orig.scaled(source.y, s)
             w, h = max(1, orig.scaled(source.width, s)), max(1, orig.scaled(source.height, s))
@@ -1179,7 +1179,7 @@ class Parser:
             # background with the object overlaid. The background itself is converted
             # without it; if you take it, the image disappears.
             if a[1] != "original":
-                raise ln.err("picture nur mit place … original <nr>")
+                raise ln.err("picture only with place … original <nr>")
             src = room["original"]
             comp = room["composite"].copy()
             comp.paste(self.object_image(ln, src, number), self.object_pos(ln, src, number))
@@ -1190,7 +1190,7 @@ class Parser:
             # Door: state 0 = closed (like the background), 1 = open (object image of the
             # original overlaid) – two images, one per state.
             if a[1] != "original":
-                raise ln.err("door nur mit place … original <nr>")
+                raise ln.err("door only with place … original <nr>")
             src = room["original"]
             comp = room["composite"].copy()
             closed = orig.to_mono(comp, *room["tone"]).crop((x, y, x + w, y + h))
@@ -1217,7 +1217,7 @@ class Parser:
             # there first; the script makes it walk itself (like r28.s203, which
             # looks for the cook right away when clicking the kitchen door).
             if "walkto" in opts:
-                raise ln.err("direct und walkto schließen sich aus")
+                raise ln.err("direct and walkto are mutually exclusive")
             walk = [WALK_DIRECT, 0]
         if "face" in opts:
             if opts["face"][0] not in DIRS:
@@ -1225,10 +1225,10 @@ class Parser:
             face = DIRS[opts["face"][0]]
         if obj == "decor":
             if not image:
-                raise ln.err("place decor braucht ein Bild (image, costume oder picture)")
+                raise ln.err("place decor needs an image (image, costume or picture)")
             walk, face = walk or [0, 0], 0 if face is None else face
         elif walk is None or face is None:
-            raise ln.err("place braucht walkto und face")
+            raise ln.err("place needs walkto and face")
         return {"object": obj, "x": x + dx, "y": y, "w": w, "h": h, "image": image, "grey_from": grey_from,
                 "backdrop": backdrop, "grey_sprite": grey_sprite,
                 "frames": frames, "speed": opts.get("speed", [8])[0],
@@ -1244,7 +1244,7 @@ class Parser:
     def object_pos(self, ln, source, number):
         o = next((o for o in source.objects if o.number == number), None)
         if o is None:
-            raise ln.err(f"Objekt {number} gibt es im Originalraum {source.number} nicht")
+            raise ln.err(f"object {number} does not exist in original room {source.number}")
         return o.x, o.y
 
     def text_ref(self, ln, tok):
@@ -1253,16 +1253,16 @@ class Parser:
         m = UI_REF.fullmatch(tok)
         if m:
             if m.group(1) not in UI_TEXT["en"]:
-                raise ln.err(f"Engine-Text {tok!r} unbekannt ({', '.join(UI_TEXT['en'])})")
+                raise ln.err(f"unknown engine text {tok!r} ({', '.join(UI_TEXT['en'])})")
             return tok
         if not REF.fullmatch(tok):
-            raise ln.err(f"Text als Verweis auf die Originaldaten angeben (z. B. r38.s203#1, o498.name), "
-                         f"nicht {tok!r}; Liste: tools/scumm_text.py <Kopie>")
+            raise ln.err(f"give texts as a reference to the original data (e.g. r38.s203#1, o498.name), "
+                         f"not {tok!r}; list: tools/scumm_text.py <copy>")
         return tok
 
     def ref(self, table, ln, ident, what):
         if ident not in table:
-            raise ln.err(f"{what} '{ident}' unbekannt")
+            raise ln.err(f"unknown {what} '{ident}'")
         return ident
 
     # ---- Script blocks ---------------------------------------------------
@@ -1273,7 +1273,7 @@ class Parser:
         while True:
             ln = self.next()
             if ln is None:
-                raise CompileError(f"Dateiende: erwartet {' / '.join(terminators)}")
+                raise CompileError(f"end of file: expected {' / '.join(terminators)}")
             kw = ln.tokens[0]
             if kw in terminators:
                 return stmts, ln
@@ -1305,7 +1305,7 @@ class Parser:
         for t in toks + ["and"]:
             if t == "and":
                 if not part:
-                    raise ln.err("Bedingung: 'and' ohne Teilbedingung")
+                    raise ln.err("condition: 'and' without a sub-condition")
                 atoms.append(self.cond_atom(ln, part))
                 part = []
             else:
@@ -1328,14 +1328,14 @@ class Parser:
             try:
                 return ("var", (toks[0], toks[1], int(toks[2], 0)), neg)
             except ValueError:
-                raise ln.err("<variable> =|<|> <zahl>")
+                raise ln.err("<variable> =|<|> <number>")
         if len(toks) == 4 and toks[1] in ("x", "y") and toks[2] in ("<", ">"):
             try:
                 return ("pos", (toks[0], toks[1], toks[2], int(toks[3], 0)), neg)
             except ValueError:
-                raise ln.err("<actor> x|y <|> <zahl>")
-        raise ln.err("Bedingung: [not] <flag> | [not] has <objekt> | [not] <objekt> open | [not] hover <objekt> | "
-                     "[not] <actor> x|y <|> <zahl> | [not] <variable> =|<|> <zahl>, mehrere mit 'and'")
+                raise ln.err("<actor> x|y <|> <number>")
+        raise ln.err("condition: [not] <flag> | [not] has <object> | [not] <object> open | [not] hover <object> | "
+                     "[not] <actor> x|y <|> <number> | [not] <variable> =|<|> <number>, several joined with 'and'")
 
     def random_block(self, ln):
         """random / case [weight] … / end: one of the cases, uniformly distributed
@@ -1343,14 +1343,14 @@ class Parser:
         allowed). The engine picks an entry of its jump table, a case
         with weight n appears there n times."""
         if len(ln.tokens) != 1:
-            raise ln.err("Syntax: random, darunter 'case [gewicht]' je Fall, dann 'end'")
+            raise ln.err("Syntax: random, below it 'case [weight]' per case, then 'end'")
 
         def weight(line):
             if line is None or line.tokens[0] != "case" or len(line.tokens) > 2:
-                raise ln.err("random: Einträge beginnen mit 'case [gewicht]'")
+                raise ln.err("random: entries start with 'case [weight]'")
             w = self.num(line, line.tokens[1]) if len(line.tokens) == 2 else 1
             if not 0 < w < 256:
-                raise line.err("case: Gewicht 1…255")
+                raise line.err("case: weight 1…255")
             return w
 
         w = weight(self.next())
@@ -1362,9 +1362,9 @@ class Parser:
                 break
             w = weight(term)
         if sum(w for w, _ in cases) > 255:
-            raise ln.err("random: Gewichte zusammen höchstens 255")
+            raise ln.err("random: weights add up to at most 255")
         if len(cases) < 2:
-            raise ln.err("random braucht mindestens zwei Fälle")
+            raise ln.err("random needs at least two cases")
         return ("random", ln, cases)
 
     def choose(self, ln):
@@ -1373,12 +1373,12 @@ class Parser:
         while opt_line is not None and opt_line.tokens[0] == "option":
             t = opt_line.tokens
             if len(t) < 2:
-                raise opt_line.err("Syntax: option <text> [if <bedingung>]")
+                raise opt_line.err("Syntax: option <text> [if <condition>]")
             self.text_ref(opt_line, t[1])
             cond = None
             if len(t) > 2:
                 if t[2] != "if":
-                    raise opt_line.err("nach dem Optionstext nur 'if …'")
+                    raise opt_line.err("after the option text only 'if …'")
                 cond = self.cond(opt_line, t[3:])
             body, term = self.block(("option", "end"))
             options.append({"text": t[1], "cond": cond, "body": body, "line": opt_line})
@@ -1387,9 +1387,9 @@ class Parser:
             self.i -= 1  # 'option' belongs to the next round
             opt_line = self.next()
         else:
-            raise ln.err("choose braucht mindestens eine 'option' und ein 'end'")
+            raise ln.err("choose needs at least one 'option' and an 'end'")
         if len(options) > 255:
-            raise ln.err("höchstens 255 Optionen pro choose")
+            raise ln.err("at most 255 options per choose")
         return ("choose", ln, options)
 
 
@@ -1432,9 +1432,9 @@ class Compiler:
             try:
                 enc += ch.encode("cp437")
             except UnicodeEncodeError as e:
-                raise CompileError(f"Zeichen nicht im Arduboy-Font (CP437): {text!r} ({e})")
+                raise CompileError(f"character not in the Arduboy font (CP437): {text!r} ({e})")
         if 0 in enc:
-            raise CompileError(f"NUL im String: {text!r}")
+            raise CompileError(f"NUL in string: {text!r}")
         return bytes(enc)
 
     def string(self, text):
@@ -1471,7 +1471,7 @@ class Compiler:
         rgb = np.asarray(room.image().convert("RGB")).max(axis=2)
         ys, xs = np.nonzero(rgb > c["threshold"])
         if not len(xs):
-            raise c["line"].err(f"Raum {c['room']}: nichts heller als {c['threshold']}")
+            raise c["line"].err(f"room {c['room']}: nothing brighter than {c['threshold']}")
         h_img, w_img = rgb.shape
         x0, y0 = max(0, xs.min() - 2), max(0, ys.min() - 2)
         x1, y1 = min(w_img, xs.max() + 3), min(h_img, ys.max() + 3)
@@ -1563,18 +1563,18 @@ class Compiler:
             ln = spec["line"]
             if kind == "room":
                 if ident not in g.rooms:
-                    raise ln.err(f"Raum '{ident}' unbekannt")
+                    raise ln.err(f"unknown room '{ident}'")
                 if not g.rooms[ident]["original"]:
-                    raise ln.err("greyscale room nur für Räume aus den Originaldaten")
+                    raise ln.err("greyscale room only for rooms from the original data")
             elif kind == "card":
                 if ident not in g.cards:
-                    raise ln.err(f"Karte '{ident}' unbekannt")
+                    raise ln.err(f"unknown card '{ident}'")
                 if spec["subjects"] or len(spec["layers"]) != 1 or \
                         set(spec["layers"][0]) - {"gamma", "dither"}:
-                    raise ln.err("greyscale card: genau eine layer-Zeile, nur gamma und dither "
-                                 "(die Karte ist Schrift, ihr Tonbereich ergibt sich daraus)")
+                    raise ln.err("greyscale card: exactly one layer line, only gamma and dither "
+                                 "(the card is lettering, its tone range follows from that)")
             elif not g.title_source:
-                raise ln.err("greyscale title nur für title original …")
+                raise ln.err("greyscale title only for title original …")
 
     def image(self, src, ln, mask=False):
         """Image from a PNG file (path) or from the original data
@@ -1587,7 +1587,7 @@ class Compiler:
             else:
                 path = self.g.base / src
                 if not path.exists():
-                    msg = f"Bild fehlt: {src}"
+                    msg = f"image missing: {src}"
                     raise ln.err(msg) if ln else CompileError(msg)
                 data, w, h, frames = encode_image(path, mask)
             self.images[key] = {"label": self.label("img"), "data": data, "w": w, "h": h,
@@ -1599,41 +1599,41 @@ class Compiler:
     def var(self, ln, name):
         err = ln.err if ln else CompileError
         if not re.fullmatch(r"[a-z_][a-z0-9_]*", name):
-            raise err(f"ungültiger Variablenname '{name}'")
+            raise err(f"invalid variable name '{name}'")
         if name in self.g.flags:
-            raise err(f"'{name}' ist schon ein Flag")
+            raise err(f"'{name}' is already a flag")
         if name not in self.g.vars:
             if len(self.g.vars) >= 255:
-                raise err("mehr als 255 Variablen")
+                raise err("more than 255 variables")
             self.g.vars[name] = len(self.g.vars)
         return self.g.vars[name]
 
     def flag(self, name):
         if not re.fullmatch(r"[a-z_][a-z0-9_]*", name):
-            raise CompileError(f"ungültiger Flag-Name '{name}'")
+            raise CompileError(f"invalid flag name '{name}'")
         if name in self.g.vars:
-            raise CompileError(f"'{name}' ist schon eine Variable")
+            raise CompileError(f"'{name}' is already a variable")
         if name not in self.g.flags:
             if len(self.g.flags) >= 255:
-                raise CompileError("mehr als 255 Flags")
+                raise CompileError("more than 255 flags")
             self.g.flags[name] = len(self.g.flags)
         return self.g.flags[name]
 
     def obj(self, ln, name):
         if name not in self.g.objects:
-            raise ln.err(f"Objekt '{name}' unbekannt")
+            raise ln.err(f"unknown object '{name}'")
         return self.g.objects[name]["index"]
 
     def actor(self, ln, name):
         if name == "narrator":
             return NONE8
         if name not in self.g.actors:
-            raise ln.err(f"Actor '{name}' unbekannt")
+            raise ln.err(f"unknown actor '{name}'")
         return self.g.actors[name]["index"]
 
     def text_buffer(self):
         if self.text_max + 1 > 255:
-            raise CompileError(f"Text mit {self.text_max} Zeichen zu lang für den Textpuffer (höchstens 254)")
+            raise CompileError(f"text with {self.text_max} characters too long for the text buffer (at most 254)")
         return self.text_max + 1
 
     def shown_len(self, text):
@@ -1670,7 +1670,7 @@ class Compiler:
         for _, ln, toks in self._children(stmts):
             if toks[0] == "call" and len(toks) == 2 and toks[1] in self.g.subs:
                 if toks[1] in path:
-                    raise ln.err(f"Unterprogramm '{toks[1]}' ruft sich selbst auf")
+                    raise ln.err(f"subroutine '{toks[1]}' calls itself")
                 need = max(need, 1 + self.depth(self.g.subs[toks[1]][1], path + (toks[1],)))
             elif toks[0] == "room":
                 need = max(need, 1 + self.entry_depth)
@@ -1717,15 +1717,15 @@ class Compiler:
                     for h in g.objects[oid]["verbs"]:
                         names |= self.started(h["body"])
             if len(names) > self.ROUTINES:
-                raise r["line"].err(f"Raum {rid}: bis zu {len(names)} Abläufe gleichzeitig "
-                                    f"({', '.join(sorted(names))}), die Engine hat {self.ROUTINES} Plätze")
+                raise r["line"].err(f"room {rid}: up to {len(names)} routines at once "
+                                    f"({', '.join(sorted(names))}), the engine has {self.ROUTINES} slots")
 
     def call_depth(self):
         g = self.g
         for rid, r in g.rooms.items():
             if self.changes_room(r["entry"]):
-                raise r["line"].err(f"Raum {rid}: Entry-Skripte dürfen keinen Raum wechseln "
-                                    f"(auch nicht über ein Unterprogramm)")
+                raise r["line"].err(f"room {rid}: entry scripts must not change the room "
+                                    f"(not even via a subroutine)")
         self.entry_depth = 0
         self.entry_depth = max([self.depth(r["entry"]) for r in g.rooms.values()], default=0)
         bodies = [b for b in g.defaults.values()]
@@ -1740,12 +1740,12 @@ class Compiler:
         self.check_routines()
         need = max([self.depth(b) for b in bodies] + [1 + self.entry_depth])
         if need > 8:
-            raise CompileError(f"Unterprogramme zu tief geschachtelt ({need} Ebenen, höchstens 8)")
+            raise CompileError(f"subroutines nested too deeply ({need} levels, at most 8)")
         return need
 
     def string_var(self, ln, sid):
         if sid not in self.g.strings:
-            raise ln.err(f"String '{sid}' unbekannt (string <id> original <nr>)")
+            raise ln.err(f"unknown string '{sid}' (string <id> original <nr>)")
         return sid
 
     def string_widths(self, src):
@@ -1754,7 +1754,7 @@ class Compiler:
         for sid, v in self.g.strings.items():
             refs = self.g.string_refs.get(sid)
             if not refs:
-                raise v["line"].err(f"String '{sid}' wird nie gesetzt (setstring)")
+                raise v["line"].err(f"string '{sid}' is never set (setstring)")
             try:
                 out[v["original"]] = (v["slot"], max(len(src.line(r)) for r in refs))
             except TextError as e:
@@ -1768,12 +1768,12 @@ class Compiler:
             if kind == "var":
                 var, cmp, value = name
                 if not 0 <= value < 256:
-                    raise ln.err("Variablen haben Werte 0…255")
+                    raise ln.err("variables have values 0…255")
                 self.op("JUNLESSV", VAR_CMP[cmp] | n, self.var(ln, var), value, target)
             elif kind == "pos":
                 actor, axis, cmp, value = name
                 if self.actor(ln, actor) == NONE8:
-                    raise ln.err("Positionsbedingung braucht einen Actor")
+                    raise ln.err("position condition needs an actor")
                 k = (POS_Y if axis == "y" else 0) | (POS_GT if cmp == ">" else 0) | n
                 self.op("JUNLESSPOS", k, self.actor(ln, actor), value, target)
             elif kind in ("has", "open", "hover"):
@@ -1788,7 +1788,7 @@ class Compiler:
         self.b.put("u8", OP[name])
         types = dict(OPCODES)[name]
         if len(types) != len(operands):
-            raise CompileError(f"interner Fehler: {name} erwartet {len(types)} Operanden")
+            raise CompileError(f"internal error: {name} expects {len(types)} operands")
         for t, v in zip(types, operands):
             self.b.put(t, v)
 
@@ -1857,10 +1857,10 @@ class Compiler:
         After each option it goes back to the choice (conditions checked
         again), until an option executes 'done' or none are left."""
         if self.in_routine:
-            raise ln.err("'choose' ist in einem Hintergrundablauf nicht erlaubt")
+            raise ln.err("'choose' is not allowed in a background routine")
         n = self.visible_bound(options)
         if n > MAX_OPTIONS:
-            raise ln.err(f"bis zu {n} Optionen gleichzeitig sichtbar, höchstens {MAX_OPTIONS}")
+            raise ln.err(f"up to {n} options visible at once, at most {MAX_OPTIONS}")
         self.max_visible = max(self.max_visible, n)
         l_top, l_end = self.label("choose"), self.label("chosen")
         targets = [self.label("opt") for _ in options]
@@ -1874,8 +1874,8 @@ class Compiler:
                 raise opt["line"].err(str(e))
             # Once it is selected, the list below shrinks down to one line.
             if len(lines) > SCREEN_ROWS - 1:
-                raise opt["line"].err(f"Option {opt['text']} ({self.src.name}) braucht {len(lines)} Zeilen; "
-                                      f"mit der Optionsliste passt das nicht auf das Display")
+                raise opt["line"].err(f"option {opt['text']} ({self.src.name}) needs {len(lines)} lines; "
+                                      f"together with the option list that does not fit on the display")
             skip = self.label("optskip")
             if opt["cond"]:
                 self.jump_unless(opt["line"], opt["cond"], skip)
@@ -1902,25 +1902,25 @@ class Compiler:
                 raise ln.err(f"Syntax: {syntax}")
 
         if self.in_routine and kw in ("say", "room", "card", "pickup", "lose", "start", "stop"):
-            raise ln.err(f"'{kw}' ist in einem Hintergrundablauf nicht erlaubt")
+            raise ln.err(f"'{kw}' is not allowed in a background routine")
         if kw == "say":
-            need(2, "say <actor|narrator> <text>  (Verweis, z. B. r38.s203#1 oder r38.s203#1:2)")
+            need(2, "say <actor|narrator> <text>  (reference, e.g. r38.s203#1 or r38.s203#1:2)")
             actor = self.actor(ln, a[0])
             for bubble in self.bubbles(ln, a[1]):
                 self.text_max = max(self.text_max, self.shown_len(bubble))
                 self.op("SAY", actor, self.string(bubble))
         elif kw == "costume":
-            need(2, "costume <actor> <wie-actor>  (zurück: costume <actor> <actor>)")
+            need(2, "costume <actor> <like-actor>  (back: costume <actor> <actor>)")
             actor, look = self.actor(ln, a[0]), self.actor(ln, a[1])
             if NONE8 in (actor, look):
-                raise ln.err("costume braucht zwei Actors")
+                raise ln.err("costume needs two actors")
             self.op("COSTUME", actor, look)
         elif kw == "pan":
-            need(1, "pan <x>  (Raumkoordinate, Bildmitte)")
+            need(1, "pan <x>  (room coordinate, centre of the screen)")
             try:
                 x = int(a[0], 0)
             except ValueError:
-                raise ln.err("pan: x muss eine Zahl sein")
+                raise ln.err("pan: x must be a number")
             if not 0 <= x < 0x8000:
                 raise ln.err("pan: 0 ≤ x < 32768")
             self.op("PAN", x)
@@ -1928,21 +1928,21 @@ class Compiler:
             need(1, "flash <frames>  (60 = 1 s)")
             n = int(a[0])
             if not 0 < n < 256:
-                raise ln.err("flash: 1…255 Frames")
+                raise ln.err("flash: 1…255 frames")
             self.op("FLASH", n)
         elif kw == "call":
             need(1, "call <sub>")
             if self.in_routine:
-                raise ln.err("call ist in einem Hintergrundablauf nicht erlaubt (play startet eine Szene)")
+                raise ln.err("call is not allowed in a background routine (play starts a cutscene)")
             if a[0] not in self.g.subs:
-                raise ln.err(f"Unterprogramm '{a[0]}' unbekannt")
+                raise ln.err(f"unknown subroutine '{a[0]}'")
             self.op("CALL", self.L(f"sub_{a[0]}"))
         elif kw == "play":
-            need(1, "play <szene>")
+            need(1, "play <cutscene>")
             if not self.in_routine:
-                raise ln.err("play nur in einem Hintergrundablauf (im Vordergrund die Befehle direkt schreiben)")
+                raise ln.err("play only in a background routine (in the foreground write the commands directly)")
             if a[0] not in self.g.cutscenes:
-                raise ln.err(f"Szene '{a[0]}' unbekannt")
+                raise ln.err(f"unknown cutscene '{a[0]}'")
             self.op("PLAY", self.L(f"cutscene_{a[0]}"))
         elif kw == "let" and len(a) == 4 and a[1] == "random":
             try:
@@ -1953,11 +1953,11 @@ class Compiler:
                 raise ln.err("let … random: 0 ≤ min ≤ max ≤ 255")
             self.op("LETR", self.var(ln, a[0]), lo, hi)
         elif kw in ("let", "add"):
-            need(2, f"{kw} <variable> <zahl>")
+            need(2, f"{kw} <variable> <number>")
             try:
                 value = int(a[1], 0)
             except ValueError:
-                raise ln.err(f"{kw}: Zahl erwartet")
+                raise ln.err(f"{kw}: number expected")
             if not (0 <= value < 256 if kw == "let" else -128 <= value < 128):
                 raise ln.err("let: 0…255, add: -128…127")
             self.op(kw.upper(), self.var(ln, a[0]), value & 0xFF)
@@ -1966,18 +1966,18 @@ class Compiler:
             sid = self.string_var(ln, a[0])
             self.op("SETSTR", self.g.strings[sid]["slot"], self.text_line(ln, a[1]))
         elif kw == "setchar":
-            need(3, "setchar <string> <stelle> <zeichencode>")
+            need(3, "setchar <string> <position> <charcode>")
             sid = self.string_var(ln, a[0])
             try:
                 pos = int(a[1], 0)
             except ValueError:
-                raise ln.err("setchar: Stelle muss eine Zahl sein")
+                raise ln.err("setchar: position must be a number")
             if not 0 <= pos < self.string_size - 1:
-                raise ln.err(f"setchar: Stelle {pos} liegt außerhalb des Strings")
+                raise ln.err(f"setchar: position {pos} lies outside the string")
             if re.fullmatch(r"\d+|0x[0-9a-fA-F]+", a[2]):
                 ch = int(a[2], 0)
                 if not 0 < ch < 256:
-                    raise ln.err("setchar: Zeichencode 1…255")
+                    raise ln.err("setchar: character code 1…255")
                 self.op("SETCHAR", self.g.strings[sid]["slot"], pos, ch)
             else:
                 self.op("SETCHARV", self.g.strings[sid]["slot"], pos, self.var(ln, a[2]))
@@ -1989,21 +1989,21 @@ class Compiler:
             try:
                 x, y = int(a[1], 0), int(a[2], 0)
             except ValueError:
-                raise ln.err(f"{kw}: Koordinaten müssen Zahlen sein")
+                raise ln.err(f"{kw}: coordinates must be numbers")
             self.op(kw.upper(), self.actor(ln, a[0]), x, y)
         elif kw == "face":
             need(2, "face <actor> left|right|front")
             if a[1] not in DIRS:
-                raise ln.err("Richtung: left|right|front")
+                raise ln.err("direction: left|right|front")
             self.op("FACE", self.actor(ln, a[0]), DIRS[a[1]])
         elif kw in ("set", "clear"):
             need(1, f"{kw} <flag>")
             self.op(kw.upper(), self.flag(a[0]))
         elif kw in ("pickup", "lose", "hide", "show"):
-            need(1, f"{kw} <objekt>")
+            need(1, f"{kw} <object>")
             self.op(kw.upper(), self.obj(ln, a[0]))
         elif kw == "state":
-            need(2, "state <objekt> <n>")
+            need(2, "state <object> <n>")
             self.op("STATE", self.obj(ln, a[0]), int(a[1]))
         elif kw == "music":
             need(1, "music <id>|stop")
@@ -2012,10 +2012,10 @@ class Compiler:
             elif a[0] in self.g.music:
                 self.op("MUSIC", self.g.music[a[0]]["index"])
             else:
-                raise ln.err(f"Musik '{a[0]}' unbekannt")
+                raise ln.err(f"unknown music '{a[0]}'")
         elif kw == "wait":
             if a[:1] == ["random"]:
-                need(3, "wait random <min> <max>  (Frames, 60 = 1 s)")
+                need(3, "wait random <min> <max>  (frames, 60 = 1 s)")
                 lo, hi = int(a[1]), int(a[2])
                 if not 0 < lo <= hi < 0x10000:
                     raise ln.err("wait random: 0 < min ≤ max < 65536")
@@ -2028,21 +2028,21 @@ class Compiler:
                 else:
                     self.op("WAITR", n, n)
         elif kw == "start":
-            need(1, "start <ablauf>")
+            need(1, "start <routine>")
             if a[0] not in self.g.routines:
-                raise ln.err(f"Ablauf '{a[0]}' unbekannt")
+                raise ln.err(f"unknown routine '{a[0]}'")
             self.op("START", self.L(f"routine_{a[0]}"))
         elif kw == "stop":
-            need(1, "stop <ablauf>")
+            need(1, "stop <routine>")
             if a[0] not in self.g.routines:
-                raise ln.err(f"Ablauf '{a[0]}' unbekannt")
+                raise ln.err(f"unknown routine '{a[0]}'")
             self.op("STOP", self.L(f"routine_{a[0]}"))
         elif kw == "room":
             # room <room> [at x y] [face dir]
             if not a or a[0] not in self.g.rooms:
-                raise ln.err(f"Raum '{a[0] if a else ''}' unbekannt (Syntax: room <raum> [at x y] [face dir])")
+                raise ln.err(f"unknown room '{a[0] if a else ''}' (Syntax: room <room> [at x y] [face dir])")
             if self.in_entry:
-                raise ln.err("Entry-Skripte dürfen keinen Raum wechseln")
+                raise ln.err("entry scripts must not change the room")
             rest = a[1:]
             x, y, face = 0xFFFF, 0, DIRS["front"]
             if rest[:1] == ["at"]:
@@ -2051,7 +2051,7 @@ class Compiler:
                 try:
                     x, y = int(rest[1], 0), int(rest[2], 0)
                 except ValueError:
-                    raise ln.err("room … at: Koordinaten müssen Zahlen sein")
+                    raise ln.err("room … at: coordinates must be numbers")
                 rest = rest[3:]
             if rest[:1] == ["face"]:
                 if len(rest) < 2 or rest[1] not in DIRS:
@@ -2059,26 +2059,26 @@ class Compiler:
                 face = DIRS[rest[1]]
                 rest = rest[2:]
             if rest:
-                raise ln.err(f"room: unerwartet {rest}")
+                raise ln.err(f"room: unexpected {rest}")
             self.op("ROOM", self.g.rooms[a[0]]["index"], x, y, face)
         elif kw == "card":
             need(1, "card <id>")
             if a[0] not in self.g.cards:
-                raise ln.err(f"Karte '{a[0]}' unbekannt")
+                raise ln.err(f"unknown card '{a[0]}'")
             c = self.g.cards[a[0]]
             music = NONE8
             if c["music"]:
                 if c["music"] not in self.g.music:
-                    raise c["line"].err(f"Musik '{c['music']}' unbekannt")
+                    raise c["line"].err(f"unknown music '{c['music']}'")
                 music = self.g.music[c["music"]]["index"]
             self.op("CARD", *self.card_image(a[0]), music)
         elif kw == "done":
             need(0, "done")
             if not getattr(self, "choose_end", None):
-                raise ln.err("'done' nur innerhalb einer choose-Option")
+                raise ln.err("'done' only inside a choose option")
             self.op("JMP", self.choose_end[-1])
         else:
-            raise ln.err(f"unbekannter Befehl '{kw}'")
+            raise ln.err(f"unknown command '{kw}'")
 
     # ---- Overall layout ----
     #
@@ -2091,9 +2091,9 @@ class Compiler:
         g, b = self.g, self.b
         self.check()
         if not g.languages:
-            raise CompileError("keine Sprachfassung angegeben (advc.py --original <Kopie> …)")
+            raise CompileError("no language version given (advc.py --original <copy> …)")
         if len(g.objects) > 254 or len(g.actors) > 254 or len(g.rooms) > 254:
-            raise CompileError("höchstens 254 Objekte/Actors/Räume")
+            raise CompileError("at most 254 objects/actors/rooms")
 
         b.mark("langdir")
         b.raw(bytes(record_size("LangDir") + len(g.languages) * record_size("LangEntry")))
@@ -2105,7 +2105,7 @@ class Compiler:
             src.numbers = {orig: g.vars[name] for name, orig in g.numbers.items()}
         self.string_size = 1 + max([w for src in g.languages for _, w in src.strings.values()], default=0)
         if self.string_size > 64:
-            raise CompileError("String-Variablen höchstens 63 Zeichen")
+            raise CompileError("string variables at most 63 characters")
 
         self.call_stack = self.call_depth()
         self.check_greyscale()
@@ -2149,7 +2149,7 @@ class Compiler:
         head.resolve()
         b.data[0:len(head.data)] = head.data
         if len(b.data) >= 1 << 24:
-            raise CompileError("Daten größer als 16 MB")
+            raise CompileError("data larger than 16 MB")
         return bytes(b.data)
 
     def compile_shared(self):
@@ -2161,7 +2161,7 @@ class Compiler:
             first, count = a["walk"]
             for f in (a["stand"], a["talk"], a["front"], a["fronttalk"], first, first + count - 1):
                 if not 0 <= f < img["frames"]:
-                    raise a["line"].err(f"Frame {f} existiert nicht (Sprite hat {img['frames']})")
+                    raise a["line"].err(f"frame {f} does not exist (sprite has {img['frames']})")
             obj = self.obj(a["line"], a["object"]) if a.get("object") else NONE8
             b.record("ActorRec", sprite=img["label"], grey=self.figure_grey(a.get("grey"), a["line"]),
                      stand=a["stand"], walkFirst=first, walkCount=count, talk=a["talk"],
@@ -2186,22 +2186,22 @@ class Compiler:
         for rid, r in g.rooms.items():
             bg = self.image(r["bg"], r["line"])
             if not 64 <= bg["h"] <= 255 or bg["w"] < 128:
-                raise r["line"].err("Raumbild muss 64–255 px hoch und mindestens 128 px breit sein")
+                raise r["line"].err("room image must be 64–255 px high and at least 128 px wide")
             r["width"] = bg["w"]
             r["height"] = bg["h"]
             r["bg_label"] = bg["label"]
             r["grey_label"] = self.room_grey(rid, r)
             if not r["boxes"] and not r.get("blank"):
-                raise r["line"].err("Raum ohne Laufflächen (walkbox / walkboxes original)")
+                raise r["line"].err("room without walk boxes (walkbox / walkboxes original)")
             if len(r["boxes"]) > 254:
-                raise r["line"].err("höchstens 254 Laufflächen pro Raum (NONE8 markiert „kein Weg“)")
+                raise r["line"].err("at most 254 walk boxes per room (NONE8 marks “no path”)")
             b.mark(f"boxes_{rid}")
             for corners, ln, (top, bottom) in r["boxes"]:
                 pts = [(int(round(x)), int(round(y))) for x, y in corners]
                 # Walk paths may extend beyond the image edge: stairs going
                 # down, exits sideways out of the image (as in the original).
                 if not all(0 <= x < 0x8000 and 0 <= y < 256 for x, y in pts):
-                    raise ln.err(f"Lauffläche {pts} außerhalb des Wertebereichs")
+                    raise ln.err(f"walk box {pts} out of range")
                 (ulx, uly), (urx, ury), (lrx, lry), (llx, lly) = pts
                 b.record("BoxRec", ulx=ulx, uly=uly, urx=urx, ury=ury,
                          lrx=lrx, lry=lry, llx=llx, lly=lly, scaleTop=top, scaleBottom=bottom)
@@ -2215,12 +2215,12 @@ class Compiler:
                     img = self.image(p["image"], ln, mask=True)
                     w, h = p["w"] or img["w"], p["h"] or img["h"]
                     if img["frames"] % p["frames"]:
-                        raise ln.err(f"frames {p['frames']} teilt die {img['frames']} Bilder nicht")
+                        raise ln.err(f"frames {p['frames']} does not divide the {img['frames']} images")
                     image = img["label"]
                     grey = self.place_grey(rid, r, p) if p["grey_from"] else self.figure_grey(p["grey_sprite"], ln)
                 else:
                     if p["w"] is None:
-                        raise ln.err("Hotspot ohne Bild braucht w h")
+                        raise ln.err("hotspot without an image needs w h")
                     w, h, image, grey = p["w"], p["h"], NONE24, NONE24
                 b.record("PlaceRec", object=oi, x=p["x"], y=p["y"], w=w, h=h,
                          walkX=p["walk"][0], walkY=p["walk"][1], face=p["face"],
@@ -2257,13 +2257,13 @@ class Compiler:
             seen = set()
             for i, h in enumerate(o["verbs"]):
                 if h["verb"] != "other" and h["verb"] not in g.verbs:
-                    raise h["line"].err(f"Verb '{h['verb']}' unbekannt")
+                    raise h["line"].err(f"unknown verb '{h['verb']}'")
                 if h["verb"] == "other" and h["other"]:
-                    raise h["line"].err("'on other' gilt für alle übrigen Verben, ohne zweites Objekt")
+                    raise h["line"].err("'on other' applies to all remaining verbs, without a second object")
                 other = self.obj(h["line"], h["other"]) if h["other"] else NONE8
                 key = (h["verb"], other)
                 if key in seen:
-                    raise h["line"].err("Handler doppelt")
+                    raise h["line"].err("handler given twice")
                 seen.add(key)
                 verb = VERB_ANY if h["verb"] == "other" else g.verbs[h["verb"]]["index"]
                 b.record("VerbEntry", verb=verb, other=other,
@@ -2299,7 +2299,7 @@ class Compiler:
         if isinstance(start, tuple):  # short form: start <room>
             start_room, start_ln = start
             if start_room not in g.rooms:
-                raise start_ln.err(f"Raum '{start_room}' unbekannt")
+                raise start_ln.err(f"unknown room '{start_room}'")
             b.mark(L("start"))
             self.op("ROOM", g.rooms[start_room]["index"], 0xFFFF, 0, 0)
             self.op("END")
@@ -2321,13 +2321,13 @@ class Compiler:
         if g.title_music:
             name, ln = g.title_music
             if name not in g.music:
-                raise ln.err(f"Musik '{name}' unbekannt")
+                raise ln.err(f"unknown music '{name}'")
             title_music = g.music[name]["index"]
         inventory_verb = NONE8
         if g.inventory_verb:
             name, ln = g.inventory_verb
             if name not in g.verbs:
-                raise ln.err(f"Verb '{name}' unbekannt")
+                raise ln.err(f"unknown verb '{name}'")
             inventory_verb = g.verbs[name]["index"]
         ui = self.lang_ui[self.src.code]
         head = Blob()
@@ -2349,18 +2349,18 @@ class Compiler:
         g = self.g
         for req, what in ((g.verbs, "verb"), (g.actors, "actor"), (g.rooms, "room")):
             if not req:
-                raise CompileError(f"mindestens ein '{what}' nötig")
+                raise CompileError(f"at least one '{what}' required")
         if g.start_room is None:
-            raise CompileError("'start <raum>' fehlt")
+            raise CompileError("'start <room>' missing")
         if "walk" not in g.verbs or g.verbs["walk"]["index"] != 0:
-            raise CompileError("das erste Verb muss 'walk' sein (Standardverb der Engine)")
+            raise CompileError("the first verb must be 'walk' (the engine's default verb)")
 
     # ---- Header for the engine ----
 
     def header(self):
         g = self.g
         out = [
-            "// Generiert von tools/advc.py – nicht von Hand ändern.",
+            "// Generated by tools/advc.py – do not edit by hand.",
             "#pragma once",
             "#include <stdint.h>",
             "",
@@ -2373,27 +2373,27 @@ class Compiler:
             f"constexpr uint8_t VAR_COUNT = {max(1, len(g.vars))};",
             f"constexpr uint8_t MAX_WALKBOXES = {max(len(r['boxes']) for r in g.rooms.values())};",
             f"constexpr uint8_t MAX_INVENTORY = {MAX_INVENTORY};",
-            f"constexpr uint8_t MAX_OPTIONS = {self.max_visible};  // gleichzeitig sichtbare Optionen",
+            f"constexpr uint8_t MAX_OPTIONS = {self.max_visible};  // options visible at once",
             f"constexpr uint8_t CHOICE_ROWS = {CHOICE_ROWS};",
             f"constexpr uint8_t TEXT_COLS = {TEXT_COLS};",
             f"constexpr uint8_t TEXT_ROWS = {TEXT_ROWS};",
             f"constexpr uint8_t OPTION_COLS = {OPTION_COLS};",
             f"constexpr uint8_t STRING_SLOTS = {max(1, len(g.strings))};",
-            f"constexpr uint8_t CALL_DEPTH = {self.call_stack};  // Rücksprünge (call, Entry-Skripte)",
+            f"constexpr uint8_t CALL_DEPTH = {self.call_stack};  // return addresses (call, entry scripts)",
             f"constexpr uint8_t STRING_SIZE = {self.string_size};",
-            f"constexpr uint8_t TEXT_BUFFER = {self.text_buffer()};  // längste Sprechblase/Option + NUL",
+            f"constexpr uint8_t TEXT_BUFFER = {self.text_buffer()};  // longest speech bubble/option + NUL",
             "",
             "constexpr uint8_t COND_FLAG = 0x00, COND_HAS = 0x01, COND_OPEN = 0x02, COND_HOVER = 0x03, COND_NOT = 0x80;",
             "constexpr uint8_t POS_Y = 0x01, POS_GT = 0x02;",
             "constexpr uint8_t VAR_EQ = 0x00, VAR_LT = 0x01, VAR_GT = 0x02;",
             "constexpr uint8_t VERB_ANY = 0xFE;  // VerbEntry.verb: „on other“",
-            "constexpr uint16_t WALK_DIRECT = 0xFFFF;  // PlaceRec.walkX: Verbskript startet ohne Hinlaufen",
+            "constexpr uint16_t WALK_DIRECT = 0xFFFF;  // PlaceRec.walkX: verb script starts without walking there",
             "",
             "enum Op : uint8_t {",
         ]
         out += [f"  OP_{name} = {i}," for i, (name, _) in enumerate(OPCODES)]
         out += ["};", ""]
-        out.append("// Befehlslängen in Bytes inkl. Opcode (CHOOSE: ohne die Options-Records)")
+        out.append("// command lengths in bytes incl. opcode (CHOOSE: without the option records)")
         lens = [1 + sum(SIZES[t] for t in ops) for _, ops in OPCODES]
         out.append(f"constexpr uint8_t OP_LENGTH[] = {{{', '.join(map(str, lens))}}};")
         out.append(f"constexpr uint8_t OP_MAX_LENGTH = {max(lens)};")
@@ -2406,20 +2406,20 @@ class Compiler:
             out.append(f"struct {name} {{")
             out += [f"  {CTYPES[t]} {f};" for f, t in spec]
             out.append("};")
-            out.append(f'static_assert(sizeof({name}) == {record_size(name)}, "{name}: Layout passt nicht zu advc.py");')
+            out.append(f'static_assert(sizeof({name}) == {record_size(name)}, "{name}: layout does not match advc.py");')
             out.append("")
         return "\n".join(out) + "\n"
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Pocket Adventure FX: Spielbeschreibung → FX-Daten")
-    ap.add_argument("source", type=Path, help="Spielbeschreibung (.adv)")
-    ap.add_argument("--bin", type=Path, required=True, help="Ausgabe: FX-Datenblock")
-    ap.add_argument("--header", type=Path, required=True, help="Ausgabe: gamedata.h")
+    ap = argparse.ArgumentParser(description="Pocket Adventure FX: scene description → FX data")
+    ap.add_argument("source", type=Path, help="scene description (.adv)")
+    ap.add_argument("--bin", type=Path, required=True, help="output: FX data block")
+    ap.add_argument("--header", type=Path, required=True, help="output: gamedata.h")
     ap.add_argument("--original", type=Path, action="append", default=[],
-                    help="Verzeichnis einer Originalkopie (DISK01.LEC …); mehrfach für mehrere Sprachen. "
-                         "Grafiken, Laufwege und Musik kommen aus der ersten, die Texte aus jeder.")
-    ap.add_argument("--preview", type=Path, help="aus Originaldaten erzeugte Bilder als PNG hierhin")
+                    help="directory of a copy of the original game (DISK01.LEC …); repeat for several languages. "
+                         "Graphics, walk boxes and music come from the first, the texts from each.")
+    ap.add_argument("--preview", type=Path, help="write images generated from the original data here as PNG")
     args = ap.parse_args()
     try:
         game = Game(args.source.resolve().parent)
@@ -2431,7 +2431,7 @@ def main():
             except (TextError, OSError) as e:
                 raise CompileError(str(e))
             if any(other.code == src.code for other in game.languages):
-                raise CompileError(f"{d}: Sprache {src.name} ist schon angegeben")
+                raise CompileError(f"{d}: language {src.name} is already given")
             game.languages.append(src)
         Parser(game, tokenize(args.source.read_text(encoding="utf-8"))).parse()
         comp = Compiler(game)
@@ -2450,8 +2450,8 @@ def main():
                 preview.save(args.preview / f"{key}.png")
     music = sum(len(m["notes"]) for m in game.music.values())
     langs = ", ".join(src.name for src in game.languages)
-    print(f"advc: {len(data)} Bytes, Sprachen: {langs}, {len(game.rooms)} Raum/Räume, {len(game.objects)} Objekte, "
-          f"{len(game.flags)} Flags, {music} Noten, Build 0x{comp.build_id:04X}")
+    print(f"advc: {len(data)} bytes, languages: {langs}, {len(game.rooms)} room(s), {len(game.objects)} objects, "
+          f"{len(game.flags)} flags, {music} notes, build 0x{comp.build_id:04X}")
     return 0
 
 

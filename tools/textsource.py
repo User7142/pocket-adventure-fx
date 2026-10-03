@@ -43,7 +43,7 @@ def detect_language(texts, game_dir):
     first = texts.get("s22#1")
     word = first.plain() if first else None
     if word not in LANGUAGES:
-        raise TextError(f"{game_dir}: Sprachfassung nicht erkannt (erstes Verb {word!r})")
+        raise TextError(f"{game_dir}: language version not recognised (first verb {word!r})")
     return LANGUAGES[word]
 
 
@@ -53,7 +53,7 @@ def to_font(text):
         # Slot characters of variables (scumm_text.SLOT_BASE) are not text
         "".join(c for c in out if not 0xE000 <= ord(c) <= 0xF8FF).encode("cp437")
     except UnicodeEncodeError as e:
-        raise TextError(f"Zeichen nicht im Arduboy-Font (CP437): {out!r}") from e
+        raise TextError(f"character not in the Arduboy font (CP437): {out!r}") from e
     return out
 
 
@@ -99,11 +99,11 @@ class TextSource:
 
     def _plain(self, ref):
         if not REF.fullmatch(ref):
-            raise TextError(f"kein Textverweis: {ref!r} (z. B. r38.s203#1, o498.name)")
+            raise TextError(f"not a text reference: {ref!r} (e.g. r38.s203#1, o498.name)")
         ident, _, page = ref.partition(":")
         text = self.texts.get(ident)
         if text is None:
-            raise TextError(f"{ref}: gibt es in der Fassung {self.name} nicht")
+            raise TextError(f"{ref}: does not exist in the {self.name} language version")
         try:
             plain = text.plain({var: slot for var, (slot, _) in self.strings.items()}, self.numbers)
         except ScummError as e:
@@ -112,11 +112,11 @@ class TextSource:
         if page:
             n = int(page)
             if not 1 <= n <= len(pages):
-                raise TextError(f"{ref}: Seite {n} gibt es nicht (der Text hat {len(pages)})")
+                raise TextError(f"{ref}: page {n} does not exist (the text has {len(pages)})")
             pages = [pages[n - 1]]
         pages = [p for p in pages if p]
         if not pages:
-            raise TextError(f"{ref}: der Text ist leer")
+            raise TextError(f"{ref}: the text is empty")
         return pages
 
     def bubbles(self, ref, cols, rows):
@@ -125,7 +125,7 @@ class TextSource:
         for page in self._plain(ref):
             lines = wrap(page, cols, self.widths())
             if any(len(l) > cols for l in lines):
-                raise TextError(f"{ref}: Wort länger als {cols} Zeichen")
+                raise TextError(f"{ref}: word longer than {cols} characters")
             out += ["\n".join(lines[i:i + rows]) for i in range(0, len(lines), rows)]
         return out
 

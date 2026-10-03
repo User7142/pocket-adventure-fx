@@ -65,12 +65,12 @@ def own_runs(block, ident):
             for p in t.parts if isinstance(p, str)]
 
 
-@unittest.skipUnless(shutil.which("descumm"), "descumm (scummvm-tools) nicht installiert")
+@unittest.skipUnless(shutil.which("descumm"), "descumm (scummvm-tools) not installed")
 class AgainstDescumm(unittest.TestCase):
     def check_copy(self, lang):
         game_dir = COPIES[lang]
         if not game_dir or not Path(game_dir, "000.LFL").exists():
-            self.skipTest(f"keine Originalkopie für {lang}")
+            self.skipTest(f"no copy of the original game for {lang}")
         with tempfile.TemporaryDirectory() as work:
             count = 0
             for ident, block in scumm_text.iter_blocks(game_dir):
