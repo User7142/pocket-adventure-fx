@@ -43,7 +43,7 @@ def ascii_frames(frames, outline):
     w = len(frames[0][0])
     for f in frames:
         if len(f) != h or any(len(row) != w for row in f):
-            raise ValueError("ASCII-Frames müssen gleich groß sein")
+            raise ValueError("ASCII frames must be the same size")
     pad = outline
     fw, fh = w + 2 * pad, h + 2 * pad
     img = Image.new("RGBA", (fw * len(frames), fh), CLEAR)
@@ -92,16 +92,16 @@ CURSOR = [[
 def save(img, rel, force):
     path = ART / rel
     if path.exists() and not force:
-        print(f"  übersprungen (existiert): {rel}")
+        print(f"  skipped (exists): {rel}")
         return
     path.parent.mkdir(parents=True, exist_ok=True)
     img.save(path)
-    print(f"  geschrieben: {rel}")
+    print(f"  written: {rel}")
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--force", action="store_true", help="vorhandene PNGs überschreiben")
+    ap.add_argument("--force", action="store_true", help="overwrite existing PNGs")
     args = ap.parse_args()
 
     img, fw, fh = ascii_frames(CURSOR, outline=1)

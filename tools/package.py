@@ -27,7 +27,7 @@ def languages(game_bin):
     u24 header)."""
     data = game_bin.read_bytes()
     if int.from_bytes(data[0:2], "little") != 0x464D:
-        raise ValueError(f"{game_bin}: kein Spieldatenblock von advc.py")
+        raise ValueError(f"{game_bin}: not a game data block from advc.py")
     names = []
     for i in range(data[4]):
         at = int.from_bytes(data[5 + 6 * i:8 + 6 * i], "little")
@@ -38,16 +38,16 @@ def languages(game_bin):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--hex", type=Path, required=True)
-    ap.add_argument("--data", type=Path, required=True, help="FX-Daten (fxdata-data.bin)")
-    ap.add_argument("--cart", type=Path, required=True, help="Cart-Bild 128×64 (Titelbild)")
-    ap.add_argument("--game", type=Path, required=True, help="game.bin (für die Sprachliste)")
+    ap.add_argument("--data", type=Path, required=True, help="FX data (fxdata-data.bin)")
+    ap.add_argument("--cart", type=Path, required=True, help="cart image 128×64 (title screen)")
+    ap.add_argument("--game", type=Path, required=True, help="game.bin (for the language list)")
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args()
 
     langs = languages(args.game)
     cart = Image.open(args.cart).convert("1")
     if cart.size != (128, 64):
-        print(f"{args.cart}: Cart-Bild muss 128×64 sein, nicht {cart.size}", file=sys.stderr)
+        print(f"{args.cart}: cart image must be 128×64, not {cart.size}", file=sys.stderr)
         return 1
 
     info = {
@@ -74,7 +74,7 @@ def main():
         z.write(args.data, "PocketAdventureFX-data.bin")
         with z.open("cart.png", "w") as f:
             cart.save(f, "PNG")
-    print(f"package: {args.out} ({args.out.stat().st_size} Bytes, {langs})")
+    print(f"package: {args.out} ({args.out.stat().st_size} bytes, {langs})")
     return 0
 
 

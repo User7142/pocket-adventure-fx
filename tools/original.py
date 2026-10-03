@@ -59,9 +59,9 @@ def _brightness(img, channel):
 def to_mono(img, size, black, white, contrast, channel="luminance"):
     """Colour image → opaque black-and-white image (RGBA) at the target size."""
     if not 0 <= black < white <= 255:
-        raise ValueError(f"Tonwerte: 0 ≤ schwarz < weiß ≤ 255, nicht {black}/{white}")
+        raise ValueError(f"tone values: 0 ≤ black < white ≤ 255, not {black}/{white}")
     if channel not in CHANNELS:
-        raise ValueError(f"Kanal: {'/'.join(CHANNELS)}, nicht {channel}")
+        raise ValueError(f"channel: {'/'.join(CHANNELS)}, not {channel}")
     small = img.convert("RGB").resize(size, Image.BOX)
     lum = _brightness(small, channel)
     blurred = _brightness(small.filter(ImageFilter.GaussianBlur(3)), channel)
@@ -144,14 +144,14 @@ def _graded(small, opts, defaults, area):
     tone = opts.get("tone", defaults["tone"])
     if tone == "auto":
         if not area.any():
-            raise ValueError("tone auto: der Bereich ist leer")
+            raise ValueError("tone auto: the area is empty")
         tone = tuple(np.percentile(v[area], AUTO_TONE))
         if tone[1] <= tone[0]:
-            raise ValueError(f"tone auto: der Bereich ist überall gleich hell ({tone[0]:.0f}); "
-                             "tone S W angeben")
+            raise ValueError(f"tone auto: the area is equally bright everywhere ({tone[0]:.0f}); "
+                             "give tone S W")
     black, white = tone
     if white <= black:
-        raise ValueError(f"Tonwerte: schwarz < weiß, nicht {black}/{white}")
+        raise ValueError(f"tone values: black < white, not {black}/{white}")
     return np.clip((v - black) / (white - black), 0, 1) ** opts.get("gamma", 1.0)
 
 
@@ -199,7 +199,7 @@ def to_grey(img, size, layers, subjects=(), tone=(30, 95), channel="luminance"):
     """Colour image → greyscale (np.uint8, levels 0–3) at the target size.
     tone and channel are the room's defaults for layers without their own."""
     if not layers:
-        raise ValueError("Graustufen brauchen mindestens eine Schicht (layer)")
+        raise ValueError("greyscale needs at least one layer")
     defaults = {"tone": tone, "channel": channel}
     small = img.convert("RGB").resize(size, Image.BOX)
     w, h = size
@@ -365,7 +365,7 @@ def costume_frames(costume, palette, sequences, scale, dark=45, outline=1, grey=
         raw.append(costume.render(state, palette, _CANVAS, _ORIGIN))
     boxes = [im.getbbox() for im in raw if im.getbbox()]
     if not boxes:
-        raise ValueError(f"Kostüm {costume.number}: keine sichtbaren Pixel")
+        raise ValueError(f"costume {costume.number}: no visible pixels")
     ox, oy = _ORIGIN
     half = max(max(ox - b[0], b[2] - ox) for b in boxes)
     top = min(b[1] for b in boxes)

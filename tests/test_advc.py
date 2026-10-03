@@ -202,7 +202,7 @@ class CompilerTest(unittest.TestCase):
 
     def test_entry_must_not_change_room(self):
         src = MINIMAL.replace("    put hero 60 55", "    room start")
-        with self.assertRaisesRegex(advc.CompileError, "Entry-Skripte dürfen keinen Raum wechseln"):
+        with self.assertRaisesRegex(advc.CompileError, "entry scripts must not change the room"):
             compile_source(src)
 
     def test_verb_handler_points_to_say(self):
@@ -229,12 +229,12 @@ class CompilerTest(unittest.TestCase):
 
     def test_quoted_text_is_rejected(self):
         bad = MINIMAL.replace("say hero r1.s200#1", 'say hero "Hallo"')
-        with self.assertRaisesRegex(advc.CompileError, "Verweis auf die Originaldaten"):
+        with self.assertRaisesRegex(advc.CompileError, "reference to the original data"):
             compile_source(bad)
 
     def test_unknown_reference_names_the_line(self):
         bad = MINIMAL.replace("r1.s200#1", "r1.s200#99")
-        with self.assertRaisesRegex(advc.CompileError, r"Zeile \d+: r1.s200#99: gibt es in der Fassung English nicht"):
+        with self.assertRaisesRegex(advc.CompileError, r"line \d+: r1.s200#99: does not exist in the English language version"):
             compile_source(bad)
 
     def test_waits_and_long_texts_become_bubbles(self):
@@ -262,13 +262,13 @@ class CompilerTest(unittest.TestCase):
 
     def test_errors_name_the_line(self):
         bad = MINIMAL.replace("say hero", "say nobody")
-        with self.assertRaisesRegex(advc.CompileError, r"Zeile \d+: Actor 'nobody' unbekannt"):
+        with self.assertRaisesRegex(advc.CompileError, r"line \d+: unknown actor 'nobody'"):
             compile_source(bad)
 
     def test_walk_must_be_first_verb(self):
         bad = MINIMAL.replace("verb walk s22#5\nverb use s22#9 prep s22#26",
                               "verb use s22#9 prep s22#26\nverb walk s22#5")
-        with self.assertRaisesRegex(advc.CompileError, "erste Verb muss 'walk'"):
+        with self.assertRaisesRegex(advc.CompileError, "first verb must be 'walk'"):
             compile_source(bad)
 
     def test_choose_with_done(self):
@@ -291,13 +291,13 @@ class CompilerTest(unittest.TestCase):
             options = "".join(f"  option r1.s200#{n}\n    done\n" for n in numbers)
             return MINIMAL.replace("    say hero r1.s200#1\n", f"    choose\n{options}    end\n")
         compile_source(choose((1, 2, 4, 5, 6, 2)), langs=("en", "de"))
-        with self.assertRaisesRegex(advc.CompileError, "passt das nicht auf das Display"):
+        with self.assertRaisesRegex(advc.CompileError, "does not fit on the display"):
             compile_source(choose((7, 1)), langs=("en", "de"))
         # Visible at once: without conditions all of them; the engine holds up
         # to MAX_OPTIONS (and gets as much room as the game needs).
         comp, _ = compile_source(choose((1,) * 5))
         self.assertIn("constexpr uint8_t MAX_OPTIONS = 5;", comp.header())
-        with self.assertRaisesRegex(advc.CompileError, "bis zu 17 Optionen gleichzeitig"):
+        with self.assertRaisesRegex(advc.CompileError, "up to 17 options visible at once"):
             compile_source(choose((1,) * 17))
 
     def test_visible_options_bound(self):
@@ -339,9 +339,9 @@ class CompilerTest(unittest.TestCase):
         src = "string name original 30\n" + MINIMAL.replace("    say hero r1.s200#1\n", body)
         comp, _ = compile_source(src)
         self.assertIn("constexpr uint8_t STRING_SIZE = 10;", comp.header())   # "Here I am" + NUL
-        with self.assertRaisesRegex(advc.CompileError, "außerhalb des Strings"):
+        with self.assertRaisesRegex(advc.CompileError, "outside the string"):
             compile_source(src.replace("setchar name 0", "setchar name 9"))
-        with self.assertRaisesRegex(advc.CompileError, "wird nie gesetzt"):
+        with self.assertRaisesRegex(advc.CompileError, "is never set"):
             compile_source("string other original 31\n" + src)
 
     def test_decor_has_no_object(self):
@@ -408,7 +408,7 @@ class GreyTest(unittest.TestCase):
     def test_auto_tone_needs_some_range(self):
         dark = self.flat_image((256, 128), (10, 10, 10))
         subject = {"mask": ("polygon", [(64, 32), (192, 32), (192, 96)]), "tone": "auto"}
-        with self.assertRaisesRegex(ValueError, "überall gleich hell"):
+        with self.assertRaisesRegex(ValueError, "equally bright everywhere"):
             orig.to_grey(dark, (128, 64), [{"tone": (0, 255)}], [subject])
 
     def test_planes_are_levels_above_their_index(self):
@@ -484,27 +484,27 @@ class WalkboxTest(unittest.TestCase):
                     byte, mask = data[(frame * 2 + x) * 2], data[(frame * 2 + x) * 2 + 1]
                     self.assertEqual(mask, 0xFF)
                     want = sum(1 << y for y in range(8) if levels[y, x] > p)
-                    self.assertEqual(byte, want, f"Frame {frame}, Spalte {x}")
+                    self.assertEqual(byte, want, f"frame {frame}, column {x}")
 
     def test_greyscale_errors(self):
         cases = {
-            "greyscale room start\n  layer gamma 1.3\nend": "nur für Räume aus den Originaldaten",
-            "greyscale room nowhere\n  layer\nend": "Raum 'nowhere' unbekannt",
-            "greyscale card part9\n  layer\nend": "Karte 'part9' unbekannt",
-            "greyscale title\n  layer\nend": "nur für title original",
-            "greyscale room start\nend": "mindestens eine layer-Zeile",
-            "greyscale room start\n  layer shine 2\nend": "unbekannte Option 'shine'",
-            "greyscale room start\n  layer from 10\nend": "ab dem linken Rand",
-            "greyscale room start\n  layer\n  layer\nend": "dieselben? Kante|derselben Kante",
-            "greyscale room start\n  layer channel max weights 1 0 0\nend": "schließen sich aus",
-            "greyscale room start\n  layer tone 90 20\nend": "schwarz < weiß",
+            "greyscale room start\n  layer gamma 1.3\nend": "only for rooms from the original data",
+            "greyscale room nowhere\n  layer\nend": "unknown room 'nowhere'",
+            "greyscale card part9\n  layer\nend": "unknown card 'part9'",
+            "greyscale title\n  layer\nend": "only for title original",
+            "greyscale room start\nend": "at least one layer line",
+            "greyscale room start\n  layer shine 2\nend": "unknown option 'shine'",
+            "greyscale room start\n  layer from 10\nend": "start at the left edge",
+            "greyscale room start\n  layer\n  layer\nend": "same edge",
+            "greyscale room start\n  layer channel max weights 1 0 0\nend": "mutually exclusive",
+            "greyscale room start\n  layer tone 90 20\nend": "black < white",
             "greyscale room start\n  layer max 4\nend": "max: 0…3",
-            "greyscale room start\n  layer min 1\nend": "min nur bei subject",
-            "greyscale room start\n  layer\n  subject outline\nend": "hue <name> oder polygon",
+            "greyscale room start\n  layer min 1\nend": "min only with subject",
+            "greyscale room start\n  layer\n  subject outline\nend": "hue <name> or polygon",
             "greyscale room start\n  layer\n  subject hue green\nend": "hue: blue/magenta",
-            "greyscale room start\n  layer\n  subject polygon 1 2 3 4\nend": "mindestens drei Punkte",
-            "greyscale room start\n  layer\n  subject polygon 0 0 9 0 9 9 dither\nend": "unbekannte Option 'dither'",
-            "greyscale room start\n  layer\n": "'end' fehlt",
+            "greyscale room start\n  layer\n  subject polygon 1 2 3 4\nend": "at least three points",
+            "greyscale room start\n  layer\n  subject polygon 0 0 9 0 9 9 dither\nend": "unknown option 'dither'",
+            "greyscale room start\n  layer\n": "'end' missing",
             "greyscale\n  layer\nend": "Syntax: greyscale",
         }
         for block, message in cases.items():
@@ -514,12 +514,12 @@ class WalkboxTest(unittest.TestCase):
 
     def test_greyscale_block_only_once(self):
         block = "greyscale room start\n  layer\nend\n"
-        with self.assertRaisesRegex(advc.CompileError, "doppelt"):
+        with self.assertRaisesRegex(advc.CompileError, "given twice"):
             compile_source(MINIMAL + block + block)
 
     def test_original_needs_data_dir(self):
         src = MINIMAL.replace('room start bg "bg.png"', "room start original 38")
-        with self.assertRaisesRegex(advc.CompileError, "braucht die Originaldaten"):
+        with self.assertRaisesRegex(advc.CompileError, "needs the original data"):
             compile_source(src)
 
 
@@ -540,7 +540,7 @@ ORIGINAL = original_dir()
 HAVE_ORIGINAL = ORIGINAL is not None and (ORIGINAL / "DISK01.LEC").exists()
 
 
-@unittest.skipUnless(HAVE_ORIGINAL, "Originaldaten nicht vorhanden (MI_ORIGINAL oder config.mk)")
+@unittest.skipUnless(HAVE_ORIGINAL, "original data not available (MI_ORIGINAL or config.mk)")
 class OriginalDataTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

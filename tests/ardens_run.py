@@ -306,7 +306,7 @@ class Driver:
         await self.frames(1)
 
     def fail(self, why):
-        self.out(f"FEHLER {why}")
+        self.out(f"ERROR {why}")
         raise SystemExit(1)
 
     def busy(self, r):
@@ -322,7 +322,7 @@ class Driver:
                 return r
             t += 10
             if t > LIMIT_MS:
-                self.fail(f"{what}: läuft nicht aus")
+                self.fail(f"{what}: never settles")
             await self.page.wait_for_timeout(10)
 
     async def idle(self):
@@ -347,14 +347,14 @@ class Driver:
                 await self.frames(1)
             else:
                 await self.tap(keys[0])
-        self.fail("Cursor erreicht das Ziel nicht")
+        self.fail("cursor does not reach the target")
 
     async def choose_verb(self, v):
         await self.idle()
         await self.tap("b")
         r = await self.report()
         if not r.at("menuOpen"):
-            self.fail("Menü geht nicht auf")
+            self.fail("menu does not open")
         cols = self.game.menu_cols
         for _ in range(40):
             r = await self.report()
@@ -363,7 +363,7 @@ class Driver:
                 break
             await self.tap("up" if row > v // cols else "down" if row < v // cols else "left" if col > v % cols else "right")
         else:
-            self.fail("Verb im Menü nicht erreichbar")
+            self.fail("verb not reachable in the menu")
         await self.tap("a")
 
     def hit_test(self, r, x, y):
@@ -444,7 +444,7 @@ class Driver:
         r = await self.report()
         pt = self.visible_point(r, obj)
         if not pt:
-            self.fail(f"Objekt {obj} nicht sichtbar")
+            self.fail(f"object {obj} not visible")
         await self.move_cursor(*pt)
 
     async def do(self, v, obj):
@@ -457,19 +457,19 @@ class Driver:
                 return
             p = self.find_place(r, obj)
             if not p:
-                self.fail(f"Objekt {obj} nicht im Raum")
+                self.fail(f"object {obj} not in the room")
             if p["walkX"] == 0xFFFF:
                 await self.walk(p["x"] + p["w"] // 2, p["y"] + p["h"])
             else:
                 await self.walk(p["walkX"], p["walkY"])
             await self.choose_verb(v)
-        self.fail(f"Objekt {obj} nicht erreichbar")
+        self.fail(f"object {obj} not reachable")
 
     async def inventory(self, obj):
         r = await self.report()
         inv = [r.at("World::inventory", i) for i in range(r.at("World::inventoryCount"))]
         if obj not in inv:
-            self.fail(f"Gegenstand {obj} nicht im Inventar")
+            self.fail(f"item {obj} not in the inventory")
         i = inv.index(obj)
         await self.tap("b")
         row, col = self.game.verb_rows + i // self.game.menu_cols, i % self.game.menu_cols
@@ -482,9 +482,9 @@ class Driver:
         await self.tap("a")
 
     async def choose(self, n, confirm):
-        r = await self.until(lambda r: r.at("choiceActive"), "choose: kein Dialog")
+        r = await self.until(lambda r: r.at("choiceActive"), "choose: no dialogue")
         if n >= r.at("choiceCount"):
-            self.fail(f"choose: nur {r.at('choiceCount')} Optionen")
+            self.fail(f"choose: only {r.at('choiceCount')} options")
         while True:
             r = await self.report()
             sel = r.at("choiceSel")
@@ -503,7 +503,7 @@ class Driver:
             cmd, *a = toks
             n = [int(x, 0) if re.fullmatch(r"-?\d+", x) else x for x in a]
             if cmd == "lang":
-                await self.until(lambda r: r.at("mode") == 0, "Sprachauswahl")
+                await self.until(lambda r: r.at("mode") == 0, "language selection")
                 while True:
                     r = await self.report()
                     if r.at("language") == n[0]:
@@ -511,7 +511,7 @@ class Driver:
                     await self.tap("down" if r.at("language") < n[0] else "up")
                 await self.tap("a")
             elif cmd == "start":
-                await self.until(lambda r: r.at("mode") == 1, "Titelbild")
+                await self.until(lambda r: r.at("mode") == 1, "title screen")
                 await self.tap("a")
             elif cmd == "idle":
                 await self.idle()
@@ -547,7 +547,7 @@ class Driver:
             elif cmd == "seed":
                 pass
             else:
-                self.fail(f"unbekannter Befehl {cmd}")
+                self.fail(f"unknown command {cmd}")
 
 
 async def main(player_dir):
@@ -608,7 +608,7 @@ async def main(player_dir):
                 break
             await page.wait_for_timeout(100)
         if base is None:
-            print("FEHLER RAM des Emulators nicht gefunden", flush=True)
+            print("ERROR emulator RAM not found", flush=True)
             return 1
         drv = Driver(page, game, syms, base)
         await drv.start_sampler()
@@ -619,7 +619,7 @@ async def main(player_dir):
             return e.code
         r = await drv.report()
         await browser.close()
-    print("ende", flush=True)
+    print("end", flush=True)
     return 0
 
 

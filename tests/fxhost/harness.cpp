@@ -174,7 +174,7 @@ namespace {
   }
 
   [[noreturn]] void fail(const std::string& why) {
-    std::printf("FEHLER %s (Frame %u)\n", why.c_str(), frame);
+    std::printf("ERROR %s (frame %u)\n", why.c_str(), frame);
     std::exit(1);
   }
 
@@ -224,7 +224,7 @@ namespace {
 
   void idle() {
     for (uint32_t n = 0; busy(); ++n) {
-      if (n > LIMIT) fail("idle: läuft nicht aus");
+      if (n > LIMIT) fail("idle: never settles");
       step();
     }
   }
@@ -232,7 +232,7 @@ namespace {
   // Move the cursor to a screen position with the D-pad.
   void moveCursor(int16_t x, int16_t y) {
     for (uint32_t n = 0; cursorX != x || cursorY != y; ++n) {
-      if (n > 2000) fail("Cursor erreicht das Ziel nicht");
+      if (n > 2000) fail("cursor does not reach the target");
       int16_t dx = x - cursorX, dy = y - cursorY;
       // After 20 frames of holding the cursor jumps by 2; release just before the target.
       bool near = (dx && std::abs(dx) < 3) || (dy && std::abs(dy) < 3);
@@ -249,9 +249,9 @@ namespace {
   void chooseVerb(uint8_t v) {
     idle();
     tap(B_BUTTON);
-    if (!menuOpen) fail("Menü geht nicht auf");
+    if (!menuOpen) fail("menu does not open");
     for (uint8_t n = 0; menuRow != v / MENU_COLS || menuCol != v % MENU_COLS; ++n) {
-      if (n > 40) fail("Verb im Menü nicht erreichbar");
+      if (n > 40) fail("verb not reachable in the menu");
       if (menuRow > v / MENU_COLS) tap(UP_BUTTON);
       else if (menuRow < v / MENU_COLS) tap(DOWN_BUTTON);
       else if (menuCol > v % MENU_COLS) tap(LEFT_BUTTON);
@@ -264,9 +264,9 @@ namespace {
   void toggleGrey() {
     idle();
     tap(B_BUTTON);
-    if (!menuOpen) fail("Menü geht nicht auf");
+    if (!menuOpen) fail("menu does not open");
     for (uint8_t n = 0; menuRow != MENU_GREY_ROW; ++n) {
-      if (n > 40) fail("Graustufen-Zeile im Menü nicht erreichbar");
+      if (n > 40) fail("greyscale line not reachable in the menu");
       tap(menuRow < MENU_GREY_ROW ? DOWN_BUTTON : UP_BUTTON);
     }
     tap(A_BUTTON);
@@ -296,8 +296,8 @@ namespace {
             Arduboy2::drawChar(x, y, uint8_t(c == '\n' || c == '\r' ? ' ' : c), fg, bg);
             std::memcpy(reference, host::screen, sizeof(reference));
             if (std::memcmp(fast, reference, sizeof(fast)))
-              fail("textcheck: Zeichen " + std::to_string(c) + " bei " + std::to_string(x) + "," +
-                   std::to_string(y) + " Farbe " + std::to_string(fg) + "/" + std::to_string(bg));
+              fail("textcheck: character " + std::to_string(c) + " at " + std::to_string(x) + "," +
+                   std::to_string(y) + " colour " + std::to_string(fg) + "/" + std::to_string(bg));
             ++checked;
           }
     // Whole texts (print → write(buffer, n)): line pieces, line breaks, edges
@@ -318,7 +318,7 @@ namespace {
             for (const char* c = t; *c; ++c) arduboy.Arduboy2::write(uint8_t(*c));
             std::memcpy(reference, host::screen, sizeof(reference));
             if (std::memcmp(fast, reference, sizeof(fast)))
-              fail(std::string("textcheck: Text \"") + t + "\" bei " + std::to_string(x) + "," + std::to_string(y));
+              fail(std::string("textcheck: Text \"") + t + "\" at " + std::to_string(x) + "," + std::to_string(y));
             ++checked;
           }
     arduboy.setTextColor(WHITE);
@@ -365,8 +365,8 @@ namespace {
             FX::drawBitmap(-sx, -sy, grey ? rec.grey : rec.background, grey ? plane : 0, dbmNormal);
             std::memcpy(reference, host::screen, sizeof(reference));
             if (std::memcmp(fast, reference, sizeof(fast)))
-              fail("drawcheck: drawScreen Raum " + std::to_string(r) + " bei " + std::to_string(sx) + "," +
-                   std::to_string(sy) + " Modus " + std::to_string(mode));
+              fail("drawcheck: drawScreen room " + std::to_string(r) + " at " + std::to_string(sx) + "," +
+                   std::to_string(sy) + " mode " + std::to_string(mode));
             ++screens;
           }
     }
@@ -392,12 +392,12 @@ namespace {
   void pickInventory(uint8_t object) {
     uint8_t i = 0;
     while (i < World::inventoryCount && World::inventory[i] != object) ++i;
-    if (i == World::inventoryCount) fail("Gegenstand " + std::to_string(object) + " nicht im Inventar");
+    if (i == World::inventoryCount) fail("item " + std::to_string(object) + " not in the inventory");
     tap(B_BUTTON);
-    if (!menuOpen) fail("Menü geht nicht auf");
+    if (!menuOpen) fail("menu does not open");
     uint8_t row = MENU_INV_ROW + i / MENU_COLS, col = i % MENU_COLS;
     for (uint8_t n = 0; menuRow != row || menuCol != col; ++n) {
-      if (n > 60) fail("Gegenstand im Menü nicht erreichbar");
+      if (n > 60) fail("item not reachable in the menu");
       if (menuRow < row) tap(DOWN_BUTTON);
       else if (menuRow > row) tap(UP_BUTTON);
       else if (menuCol < col) tap(RIGHT_BUTTON);
@@ -448,7 +448,7 @@ namespace {
         cs = s < cs ? cs + 1 : cs - 1;
       click(cs, cy);
       for (uint32_t k = 0; busy() || World::isWalking(PLAYER); ++k) {
-        if (k > LIMIT) fail("walk: läuft nicht aus");
+        if (k > LIMIT) fail("walk: never settles");
         step();
       }
       if (cs == s && cy == t) return;
@@ -457,7 +457,7 @@ namespace {
 
   void aim(uint8_t object) {
     int16_t sx, sy;
-    if (!visiblePoint(object, sx, sy)) fail("Objekt " + std::to_string(object) + " nicht sichtbar");
+    if (!visiblePoint(object, sx, sy)) fail("object " + std::to_string(object) + " not visible");
     moveCursor(sx, sy);
   }
 
@@ -466,7 +466,7 @@ namespace {
     int16_t sx, sy;
     for (int n = 0; !visiblePoint(object, sx, sy); ++n) {
       PlaceRec p;
-      if (n > 5 || !World::findPlace(object, p)) fail("Objekt " + std::to_string(object) + " nicht im Raum");
+      if (n > 5 || !World::findPlace(object, p)) fail("object " + std::to_string(object) + " not in the room");
       // Walk there first; this loses the picked verb, so pick it again.
       if (p.walkX == WALK_DIRECT) walk(p.x + p.w / 2, p.y + p.h);
       else walk(p.walkX, p.walkY);
@@ -478,12 +478,12 @@ namespace {
 
 int main(int argc, char** argv) {
   if (argc != 2) {
-    std::fprintf(stderr, "Aufruf: fxhost <game.bin> < befehle\n");
+    std::fprintf(stderr, "usage: fxhost <game.bin> < commands\n");
     return 2;
   }
   std::ifstream in(argv[1], std::ios::binary);
   host::flash.assign(std::istreambuf_iterator<char>(in), {});
-  if (host::flash.empty()) fail("game.bin fehlt");
+  if (host::flash.empty()) fail("game.bin missing");
   std::memset(lastActorRoom, NONE8, sizeof(lastActorRoom));
   std::srand(1);
   setup();
@@ -512,10 +512,10 @@ int main(int argc, char** argv) {
       int n;
       ls >> n;
       for (uint32_t k = 0; !choiceActive; ++k) {
-        if (k > LIMIT) fail(cmd + ": kein Dialog");
+        if (k > LIMIT) fail(cmd + ": no dialogue");
         step();
       }
-      if (n >= choiceCount) fail(cmd + ": nur " + std::to_string(choiceCount) + " Optionen");
+      if (n >= choiceCount) fail(cmd + ": only " + std::to_string(choiceCount) + " options");
       while (choiceSel > n) tap(UP_BUTTON);
       while (choiceSel < n) tap(DOWN_BUTTON);
       if (cmd == "choose") tap(A_BUTTON);
@@ -543,7 +543,7 @@ int main(int argc, char** argv) {
       ls >> k;
       uint8_t b = k == "a" ? A_BUTTON : k == "b" ? B_BUTTON : k == "up" ? UP_BUTTON : k == "down" ? DOWN_BUTTON
                 : k == "left" ? LEFT_BUTTON : k == "right" ? RIGHT_BUTTON : 0;
-      if (!b) fail("press: unbekannte Taste " + k);
+      if (!b) fail("press: unknown key " + k);
       tap(b);
     } else if (cmd == "walk") {
       int x, y;
@@ -562,7 +562,7 @@ int main(int argc, char** argv) {
         return World::actors[a].room == World::room && (rel == "<" ? px < x : px > x);
       };
       for (uint32_t k = 0; !ok(); ++k) {
-        if (k > LIMIT) fail("until: Bedingung tritt nicht ein");
+        if (k > LIMIT) fail("until: condition never occurs");
         step();
       }
     } else if (cmd == "grey") {
@@ -583,7 +583,7 @@ int main(int argc, char** argv) {
       std::printf("pos %d %u %u room %u scroll %d\n", a, World::actors[a].x >> SUBPIXEL_SHIFT,
                   World::actors[a].y >> SUBPIXEL_SHIFT, World::actors[a].room, World::scrollX);
     } else {
-      fail("unbekannter Befehl " + cmd);
+      fail("unknown command " + cmd);
     }
   }
   std::printf("frames %u\n", frame);
